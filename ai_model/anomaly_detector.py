@@ -124,6 +124,12 @@ class BehaviorAnomalyDetector:
         if not self.is_trained or self.model is None:
             print("[AI] Model is not trained. Cannot perform detection.")
             return None
+        
+        # Check for obvious attack signatures BEFORE model prediction
+        # This ensures known attack patterns are caught even if model misses them
+        if self._is_obvious_attack(fingerprint_row, device_name, mac):
+            print(f"[{mac}] {device_name[:15]:15} -> ANOMALY DETECTED! [!] (Attack signature matched)")
+            return True
             
         # Ensure input is a dataframe slice correctly formatted for sklearn
         X_new = fingerprint_row[self.features]
@@ -138,6 +144,47 @@ class BehaviorAnomalyDetector:
         
         print(f"[{mac}] {device_name[:15]:15} -> {status} (Score: {score:.3f})")
         return is_anomaly
+    
+    def _is_obvious_attack(self, fingerprint_row, device_name, mac):
+        """
+        Check for obvious attack signatures that should always trigger alerts.
+        
+        Args:
+            fingerprint_row: DataFrame row with device behavioral features
+            device_name: Name of the device
+            mac: MAC address of the device
+            
+        Returns:
+            bool: True if obvious attack detected
+        """
+        row = fingerprint_row.iloc[0] if not fingerprint_row.empty else None
+        if row is None:
+            return False
+        
+        # Attack keywords in device name
+        attack_keywords = ['spoof', 'attack', 'malicious', 'rogue', 'fake', 'flood']
+        name_lower = device_name.lower()
+        if any(keyword in name_lower for keyword in attack_keywords):
+            return True
+        
+        # Extreme behavioral patterns
+        interval = row.get('mean_interval', 1000)
+        packet_count = row.get('packet_count', 0)
+        rssi = row.get('mean_rssi', -60)
+        
+        # Rapid flooding (interval < 50ms AND many packets)
+        if interval < 50 and packet_count > 50:
+            return True
+        
+        # Extremely weak or strong signal
+        if rssi < -95 or rssi > -25:
+            return True
+        
+        # Massive packet flood
+        if packet_count > 150:
+            return True
+        
+        return False
 
     def get_anomaly_score(self, fingerprint_row):
         """
