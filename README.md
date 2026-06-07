@@ -1,4 +1,18 @@
-# BLE Trust Registry
+<div align="center">
+  <img src="assets/logo.png" alt="BLE Trust Registry Logo" width="300"/>
+  
+  # BLE Trust Registry
+  
+  **Behavioral Anomaly Detection for Bluetooth Low Energy Devices**
+  
+  [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/downloads/)
+  [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+  [![Research](https://img.shields.io/badge/Status-Research%20Prototype-orange.svg)](https://github.com/manasvi-0523/BLE_mirror)
+</div>
+
+---
+
+## Overview
 
 A research prototype for passive Bluetooth Low Energy anomaly detection. It watches how nearby BLE devices advertise themselves over time, builds a behavioral fingerprint for each one, and flags anything that deviates from what it's learned to expect. Suspicious events get logged to a tamper-evident local ledger and surfaced through a browser dashboard.
 
