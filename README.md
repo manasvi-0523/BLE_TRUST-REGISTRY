@@ -1,14 +1,10 @@
-<div align="center">
-  <img src="assets/logo.png" alt="BLE Trust Registry Logo" width="300"/>
-  
-  # BLE Trust Registry
-  
-  **Behavioral Anomaly Detection for Bluetooth Low Energy Devices**
-  
-  [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/downloads/)
-  [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-  [![Research](https://img.shields.io/badge/Status-Research%20Prototype-orange.svg)](https://github.com/manasvi-0523/BLE_mirror)
-</div>
+# BLE Trust Registry
+
+**Behavioral Anomaly Detection for Bluetooth Low Energy Devices**
+
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Research](https://img.shields.io/badge/Status-Research%20Prototype-orange.svg)](https://github.com/manasvi-0523/BLE_mirror)
 
 ---
 
