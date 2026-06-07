@@ -1,179 +1,277 @@
-# BLE Device Trust Registry
-### AI-Powered Behavioral Fingerprinting & Blockchain Identity Ledger
+# BLE Trust Registry
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![BLE Security](https://img.shields.io/badge/Security-BLE-green.svg)](https://github.com/manasvi-0523/BLE_TRUST-REGISTRY)
+A research prototype for Bluetooth Low Energy device monitoring. It scans for nearby BLE devices, builds behavioral fingerprints from raw advertisement data, and uses an Isolation Forest model to flag devices that deviate from a learned baseline. Suspicious events are logged to a local tamper-evident ledger and surfaced through a Flask dashboard.
 
-A **production-grade** security system designed to protect Bluetooth Low Energy (BLE) environments from spoofing and rogue device attacks. This system combines **Unsupervised Machine Learning** with a **Tamper-Evident Blockchain Ledger** to establish a "Behavioral Identity" for every device in range.
-
-### 🆕 What's New in This Branch
-This `efficient-core-refactor` branch addresses critical bugs and introduces **scientifically sound** anomaly detection:
-
-✅ **Baseline/Monitor Mode Separation** - The biggest fix: no longer trains and tests on the same data  
-✅ **Dynamic Contamination Rate** - Adapts to dataset size for reliable detection  
-✅ **Blockchain Persistence** - Chain survives restarts with integrity validation  
-✅ **Resource Leak Fixes** - Proper file handle management  
-✅ **Real Interval Calculation** - Fixed bug where `tx_power` was used instead of actual time intervals  
-✅ **Centralized Configuration** - Clean architecture with `config.py`
+This was built as an academic project to explore whether passive behavioral analysis of BLE traffic can serve as a lightweight, infrastructure-free anomaly detection layer. It is not a production security tool.
 
 ---
 
-## 🏛️ System Architecture
+## Problem Statement
 
-The project follows a **scientifically rigorous 5-phase pipeline** with proper train/test separation:
+BLE devices advertise continuously and passively — broadcasting MAC addresses, RSSI values, service UUIDs, and timing patterns without any authentication. In dense environments (offices, hospitals, university campuses), it's difficult to distinguish a legitimate device that belongs in the space from one that doesn't: a spoofed peripheral, a rogue scanner, or a device exhibiting unusual transmission patterns.
 
-1.  **Phase 1: BLE Data Capture**: Asynchronous scanning using `Bleak` library with proper interval calculation
-2.  **Phase 2: Feature Engineering**: Vectorized feature extraction via `Pandas` for behavioral fingerprints
-3.  **Phase 3: AI Anomaly Detection**: **Isolation Forest** with dynamic contamination rate and baseline learning
-4.  **Phase 4: Blockchain Trust Ledger**: Tamper-evident SHA-256 ledger with persistence and duplicate prevention
-5.  **Phase 5: Real-time Alerting**: Persistent alert logging with criticality classification
-
-### Key Architectural Improvements
-
-**Baseline/Monitor Separation** (The Critical Fix):
-- **Baseline Mode**: Scan trusted environment → train model → save to disk
-- **Monitor Mode**: Load trained model → scan current environment → detect anomalies
-
-This eliminates the fatal flaw of training and testing on the same data.
+Most BLE security research focuses on protocol-level cryptographic hardening. This project takes a different approach: instead of inspecting packet contents, it asks whether a device's *behavioral signature* — how it advertises over time — matches what was previously seen as normal.
 
 ---
 
-## 🚀 Getting Started
+## Key Features
 
-### Prerequisites
-*   Windows 10/11 Laptop
-*   Integrated or USB Bluetooth Adapter
-*   Python 3.8 or higher
-
-### Installation
-
-1.  **Clone the Repository**:
-    ```bash
-    git clone https://github.com/manasvi-0523/BLE_TRUST-REGISTRY.git
-    cd BLE_TRUST-REGISTRY
-    ```
-
-2.  **Set up Virtual Environment**:
-    ```bash
-    python -m venv venv
-    .\venv\Scripts\activate
-    ```
-
-3.  **Install Dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
+- **Two-phase operation** — explicit baseline mode (learn) and monitor mode (detect), so the model is never trained and tested on the same data in the same run
+- **Behavioral fingerprinting** — per-device features: mean RSSI, advertisement interval (mean + std), packet count, and service UUID count
+- **Isolation Forest anomaly detection** — dynamically adjusts contamination rate based on dataset size to reduce false positives on small scans
+- **Three-tier alert criticality** — LOW / MEDIUM / HIGH based on anomaly score thresholds, all written to a persistent CSV log
+- **Local blockchain ledger** — SHA-256 linked blocks store verified device fingerprints; chain integrity is verified on every load
+- **Duplicate suppression** — the ledger skips re-adding a device if its behavior hasn't meaningfully changed (within 10% tolerance)
+- **Attack simulator** — injects synthetic anomalous devices (spoofing, flooding, rogue AP, erratic behavior) directly into the dataset for testing without needing a real attacker
+- **Flask web dashboard** — live view of detected devices, alert history, blockchain state, and scan controls via browser
 
 ---
 
-## 💻 Usage
+## System Architecture
 
-### Baseline Mode - Learn Normal Behavior
-
-First, establish a baseline of trusted devices in a clean environment:
-
-```powershell
-python main.py --mode baseline
+```
+                  ┌──────────────────────────────────┐
+                  │           main.py                │
+                  │   (baseline / monitor mode)      │
+                  └──────────┬───────────────────────┘
+                             │
+           ┌─────────────────▼──────────────────────┐
+           │         scanner/ble_scanner.py          │
+           │   bleak async BLE scan → ble_data.csv  │
+           └─────────────────┬──────────────────────┘
+                             │
+           ┌─────────────────▼──────────────────────┐
+           │    feature_engine/feature_extract.py   │
+           │  per-device aggregation: RSSI, interval│
+           │  std, packet count, services count     │
+           └──────────┬──────────────────────────────┘
+                      │
+         ┌────────────▼────────────┐
+         │  ai_model/              │
+         │  anomaly_detector.py    │
+         │  Isolation Forest       │
+         │  train() / detect()     │
+         └────────────┬────────────┘
+                      │
+      ┌───────────────┴──────────────────┐
+      │                                  │
+┌─────▼──────────────┐     ┌─────────────▼──────────┐
+│  alerts/           │     │  blockchain/            │
+│  alert_system.py   │     │  blockchain.py          │
+│  LOW/MEDIUM/HIGH   │     │  SHA-256 linked ledger  │
+│  → alerts.csv      │     │  → chain.json           │
+└────────────────────┘     └─────────────────────────┘
+                      │
+           ┌──────────▼──────────┐
+           │    dashboard.py     │
+           │    Flask + HTML     │
+           │    http://127.0.0.1:5000 │
+           └─────────────────────┘
 ```
 
-This will:
-- Scan for devices over 2 cycles (configurable with `--cycles`)
-- Extract behavioral features
-- Train the AI model
-- Save the model to disk
-- Register all devices in the blockchain as trusted
-
-### Monitor Mode - Detect Anomalies
-
-Once baseline is established, activate real-time monitoring:
-
-```powershell
-python main.py --mode monitor
-```
-
-This will:
-- Load the pre-trained model
-- Scan for devices over 5 cycles (configurable)
-- Detect anomalies using the learned baseline
-- Trigger alerts for suspicious devices
-- Add normal devices to the blockchain
-
-### Custom Cycle Counts
-
-```powershell
-# Longer baseline learning (recommended for production)
-python main.py --mode baseline --cycles 5
-
-# Extended monitoring session
-python main.py --mode monitor --cycles 20
-```
+All paths are resolved relative to the project root via `config.py`. There are no hardcoded absolute paths.
 
 ---
 
-## 🔬 What Makes This Scientifically Sound
+## Folder Structure
 
-### ❌ Old Approach (Flawed)
 ```
-Scan → Extract Features → Train Model → Predict on same scan
-```
-Problem: Model predicts on the exact data it was trained on. Meaningless results.
-
-### ✅ New Approach (Correct)
-```
-Baseline: Scan trusted environment → Train → Save model
-Monitor:  Load model → Scan current environment → Detect anomalies
-```
-Result: True anomaly detection with proper train/test separation.
-
----
-
-## 📊 Output & Results
-
-### Security Result Corner
-At the end of each session, the system generates a **Security Result Corner** showing:
-*   **Overall Status**: (SAFE or NOT SAFE)
-*   **Spoofing Device Log**: A list of specific MAC addresses and Names that were blocked.
-*   **Criticality Levels**:
-    *   **LOW**: Slight deviation from baseline.
-    *   **MEDIUM**: Intentional behavioral shift detected.
-    *   **HIGH**: Major threat (e.g., Denial of Service or Packet Flooding).
-
----
-
-## 📂 Project Structure
-
-```text
 BLE_TRUST-REGISTRY/
-├── config.py            # Centralized configuration (NEW)
-├── scanner/             # Phase 1: BLE scanning with proper interval tracking
-├── feature_engine/      # Phase 2: Vectorized feature extraction
-├── ai_model/            # Phase 3: Isolation Forest with dynamic contamination
-├── blockchain/          # Phase 4: Persistent tamper-evident ledger
-├── alerts/              # Phase 5: Alert logging with history
-├── dataset/             # Temporary behavioral data storage
-├── main.py              # Baseline/Monitor mode orchestration
-└── requirements.txt     # Python dependencies
+├── main.py                     # Entry point — baseline and monitor modes
+├── dashboard.py                # Flask web dashboard
+├── attack_simulator.py         # Synthetic attack injection for testing
+├── comprehensive_attack_test.py
+├── config.py                   # Centralized path and parameter config
+├── requirements.txt
+│
+├── scanner/
+│   └── ble_scanner.py          # BleakScanner wrapper, CSV logger
+│
+├── feature_engine/
+│   └── feature_extract.py      # Aggregates raw CSV into per-device features
+│
+├── ai_model/
+│   └── anomaly_detector.py     # Isolation Forest train/detect/load/save
+│
+├── blockchain/
+│   └── blockchain.py           # Block, SimpleBlockchain, integrity verification
+│
+├── alerts/
+│   └── alert_system.py         # Alert triggering and CSV log writer
+│
+├── templates/
+│   └── index.html              # Dashboard frontend
+│
+└── dataset/
+    └── .gitkeep                # Directory placeholder (data files are gitignored)
 ```
 
 ---
 
-## 🛡️ Security Disclaimer
-This project is for **ethical security research and educational purposes only**. Always ensure you have permission before scanning or analyzing devices in a private environment.
+## Installation
+
+**Requirements:** Python 3.9+, Windows 10/11 (Classic Bluetooth scanning uses the Windows PnP API; BLE scanning via `bleak` works cross-platform but the full feature set is tested on Windows).
+
+```bash
+# Clone the repository
+git clone https://github.com/manasvi-0523/BLE_mirror.git
+cd BLE_mirror
+
+# Create and activate a virtual environment
+python -m venv venv
+venv\Scripts\activate        # Windows
+# source venv/bin/activate   # Linux/Mac
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+No additional configuration is required for basic use. The `config.py` file contains all tuneable parameters (scan duration, cycle counts, contamination rate, alert thresholds).
 
 ---
 
-## 🐛 Bugs Fixed in This Branch
+## Usage
 
-1. **Interval calculation bug**: Was using `tx_power` instead of actual time difference
-2. **Resource leak**: Scanner file handle never closed properly
-3. **Train/test contamination**: Model was predicting on its own training data
-4. **Small dataset failure**: Model would fail or give meaningless results with <10 devices
-5. **Blockchain persistence**: Chain was lost on restart
-6. **Duplicate blocks**: Same device added repeatedly with unchanged behavior
-7. **Hard-coded paths**: All modules had scattered path definitions
+### CLI — Baseline Mode
+
+Scans for BLE devices and trains an Isolation Forest model on their behavioral fingerprints. Run this first, in an environment where the devices present are ones you consider trusted.
+
+```bash
+python main.py --mode baseline
+# Default: 2 scan cycles × 15 seconds each
+
+python main.py --mode baseline --cycles 3
+# Custom: 3 cycles
+```
+
+What happens:
+- Old dataset is cleared so baseline isn't contaminated by previous sessions
+- Each device's RSSI, interval, packet count, and service count are recorded
+- After all cycles complete, the model is trained and saved to `ai_model/isolation_forest.pkl`
+- Verified devices are written to the blockchain ledger
+
+### CLI — Monitor Mode
+
+Loads the trained model and flags devices whose behavior deviates from baseline.
+
+```bash
+python main.py --mode monitor
+# Default: 5 scan cycles
+
+python main.py --mode monitor --cycles 10
+```
+
+What happens:
+- Model is loaded from disk (fails with a clear message if baseline hasn't been run)
+- Each detected device is scored; anomalies trigger an alert with LOW/MEDIUM/HIGH criticality
+- Normal devices are added to the blockchain if not already present
+- A summary table is printed at the end of all cycles
+
+### Web Dashboard
+
+```bash
+python dashboard.py
+```
+
+Opens automatically at `http://127.0.0.1:5000`. The dashboard shows detected devices, alert history, blockchain ledger state, and provides buttons to start baseline/monitor scans from the browser. Note that scans launched from the dashboard spawn a separate console process — check that window for detailed output.
+
+### Attack Simulator
+
+For testing the detection pipeline without a real attacker device:
+
+```bash
+python attack_simulator.py
+# Interactive menu — choose an attack type, packet count, and duration
+
+python attack_simulator.py spoofing 20 10
+# CLI mode — inject spoofing attack, 20 packets over 10 seconds
+```
+
+Available attack types: `spoofing`, `flooding`, `scanner`, `erratic`, `rogue_ap`.
+
+Injected packets are written directly to `dataset/ble_data.csv`. Run `--mode monitor` afterward to see whether the model flags them.
 
 ---
 
-**Developed  by NEXUS ONLINE**  
-**Refactored for production-grade quality**
+## Baseline and Monitor Workflow
+
+```
+Step 1: Run in a clean, known environment
+        python main.py --mode baseline
+
+Step 2: Verify the model trained successfully
+        (look for: "[AI] Model successfully trained & saved")
+
+Step 3: Optionally inject a simulated attack
+        python attack_simulator.py
+
+Step 4: Run monitor mode
+        python main.py --mode monitor
+
+Step 5: Review alerts
+        cat alerts/alerts.csv
+
+Step 6: Check blockchain integrity
+        (printed at end of monitor run, also visible in dashboard)
+```
+
+Re-running `--mode baseline` clears the old dataset and starts a fresh chain. Do this intentionally — not by accident — as it resets the trust registry.
+
+---
+
+## Security and Privacy Notes
+
+**What gets generated locally and should not be committed:**
+
+| File | Why |
+|---|---|
+| `dataset/ble_data.csv` | Contains MAC addresses and signal data of real devices in your environment |
+| `blockchain/chain.json` | Runtime ledger — environment-specific, not portable |
+| `alerts/alerts.csv` | Alert log — may contain device identifiers |
+| `ai_model/isolation_forest.pkl` | Fitted model — trained on your specific devices, not generalizable |
+| `ai_model/scaler.pkl` | Same — fitted to your environment's data distribution |
+| `.env` | Reserved for future credential configuration |
+
+All of the above are covered by `.gitignore`. Do not override or force-add them.
+
+**The blockchain ledger** is local and not distributed. Its purpose is tamper-evidence: if `chain.json` is modified externally, the integrity check on load will catch it and reset to a fresh chain. It does not provide cryptographic guarantees equivalent to a distributed ledger.
+
+**MAC address randomization:** Many modern devices (Android 10+, iOS 14+, Windows 10+) randomize their MAC addresses periodically. This system tracks devices by MAC, so randomized addresses will appear as new devices on each connection and will not be reliably linked to a physical device across sessions. This is a fundamental limitation of passive BLE monitoring.
+
+---
+
+## Limitations
+
+- **MAC randomization breaks continuity.** Devices that rotate addresses cannot be consistently tracked. This affects the majority of modern phones and tablets.
+- **Small environment problem.** Isolation Forest with fewer than ~10 devices produces unreliable results regardless of the contamination setting. The minimum device guard (`MIN_DEVICES_FOR_MODEL = 3`) will warn but still proceed.
+- **No real-time scanning.** The pipeline runs in discrete cycles. Threats that appear and disappear within a single 15-second scan window may be missed entirely.
+- **Behavioral features are shallow.** RSSI, interval, and service count can be spoofed trivially by an informed attacker. This system detects unsophisticated behavioral anomalies, not targeted evasion.
+- **Windows-only for full functionality.** Classic Bluetooth scanning via the Windows PnP API is silently skipped on Linux and macOS. BLE scanning works cross-platform but is not tested outside Windows.
+- **The dashboard spawns subprocesses.** Scans started from the browser open a separate console window. There is no real-time log streaming to the dashboard during a scan.
+- **This is a prototype.** It is suitable for academic evaluation and research demonstration. It is not hardened for deployment in a real security context.
+
+---
+
+## Future Improvements
+
+- **Device trust scoring** — replace the binary NORMAL/ANOMALY label with a persistent 0–100 score per device that accumulates across sessions, decaying for devices not seen recently
+- **Context manager for scanner file handles** — the current `__del__` cleanup is unreliable; proper `__enter__`/`__exit__` implementation would prevent handle leaks in long-running sessions
+- **Dashboard blockchain verification** — the current `/api/blockchain` route only checks `previous_hash` linkage; it should also recompute each block's hash to catch content-level tampering
+- **Email/webhook alerts** — opt-in notification when HIGH criticality anomalies are detected, using environment variables for credentials rather than hardcoded config
+- **Persistent model reuse** — currently the model retrains from scratch if re-run; adding a `--retrain` flag and defaulting to loading the existing model when available would preserve accumulated baseline knowledge
+- **Merkle tree verification** — a stronger integrity structure for the ledger than a linear SHA-256 chain
+- **Cross-platform Classic BT support** — replace the Windows PnP approach with a platform-agnostic fallback
+
+---
+
+## Contributors
+
+**Team NEXUS ONLINE — Don Bosco Institute of Technology, Bengaluru**  
+Cybersecurity and Blockchain Division, Idea Lab  
+Faculty Supervisor: Dr. Sheeba
+
+---
+
+## Disclaimer
+
+This tool is intended for use on networks and devices you own or have explicit permission to monitor. Passive BLE scanning in some jurisdictions may be subject to local regulations regarding radio monitoring and data collection. The authors take no responsibility for misuse.
