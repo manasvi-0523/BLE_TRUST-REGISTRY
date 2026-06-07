@@ -214,6 +214,16 @@
             border-left-color: #dc3545;
         }
         
+        .alert-medium {
+            background: #fff3cd;
+            border-left-color: #ffc107;
+        }
+        
+        .alert-low {
+            background: #d1ecf1;
+            border-left-color: #17a2b8;
+        }
+        
         .last-update {
             text-align: center;
             color: white;
@@ -493,12 +503,38 @@
                 
                 let html = '';
                 data.alerts.forEach(alert => {
-                    const className = alert.criticality === 'HIGH' ? 'alert-item alert-high' : 'alert-item';
+                    // Determine alert styling based on criticality
+                    let className = 'alert-item';
+                    let icon = '⚠️';
+                    let badge = 'badge-warning';
+                    
+                    if (alert.criticality === 'HIGH') {
+                        className = 'alert-item alert-high';
+                        icon = '🚨';
+                        badge = 'badge-danger';
+                    } else if (alert.criticality === 'MEDIUM') {
+                        className = 'alert-item alert-medium';
+                        icon = '⚠️';
+                        badge = 'badge-warning';
+                    } else {
+                        className = 'alert-item alert-low';
+                        icon = 'ℹ️';
+                        badge = 'badge-info';
+                    }
+                    
                     html += `<div class="${className}">`;
-                    html += `<strong>⚠️ ${alert.device_name || 'Unknown'}</strong> (${alert.mac_address})<br>`;
-                    html += `Anomaly Score: <code>${alert.anomaly_score}</code> | `;
-                    html += `Criticality: <span class="badge badge-${alert.criticality.toLowerCase()}">${alert.criticality}</span> | `;
-                    html += `Time: ${alert.timestamp}`;
+                    html += `<strong>${icon} ${alert.device_name || 'Unknown'}</strong> <code>${alert.mac_address}</code><br>`;
+                    html += `<span class="badge ${badge}">${alert.criticality} CRITICALITY</span> | `;
+                    html += `Anomaly Score: <code>${alert.anomaly_score}</code><br>`;
+                    
+                    // Show reason/explanation if available
+                    if (alert.reason) {
+                        html += `<div style="margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px;">`;
+                        html += `<strong>🔍 Why:</strong> ${alert.reason}`;
+                        html += `</div>`;
+                    }
+                    
+                    html += `<small style="color: #666;">Detected at: ${alert.timestamp}</small>`;
                     html += '</div>';
                 });
                 

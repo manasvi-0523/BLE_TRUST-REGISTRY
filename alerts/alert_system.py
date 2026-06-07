@@ -7,7 +7,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import ALERTS_PATH, ALERT_CRITICALITY_HIGH, ALERT_CRITICALITY_MEDIUM
 
-def trigger_alert(mac, device_name, score, write_to_log=True):
+def trigger_alert(mac, device_name, score, device_features=None, write_to_log=True):
     """
     Triggers a visual (and programmatic console) alert when an anomaly is detected.
     
@@ -15,6 +15,7 @@ def trigger_alert(mac, device_name, score, write_to_log=True):
         mac: MAC address of the anomalous device
         device_name: Name of the device
         score: Anomaly score from the model (more negative = more anomalous)
+        device_features: Dictionary of device behavioral features for explanation
         write_to_log: If True, write alert to CSV log file
     """
     # Determine criticality level
@@ -25,6 +26,9 @@ def trigger_alert(mac, device_name, score, write_to_log=True):
     else:
         criticality = "LOW"
     
+    # Generate explanation for why alert was triggered
+    explanation = _generate_alert_explanation(device_features, score, criticality)
+    
     print("\n" + "="*50)
     print("! SECURITY ALERT: ANOMALOUS DEVICE DETECTED !".center(50))
     print("="*50)
@@ -33,16 +37,78 @@ def trigger_alert(mac, device_name, score, write_to_log=True):
     print(f"MAC Address   : {mac}")
     print(f"Anomaly Score : {score:.3f}")
     print(f"Criticality   : {criticality}")
+    print(f"Reason        : {explanation}")
     print("="*50)
     print("ACTION: Device blocked from Blockchain Identity Registry.\n")
     
     # Write to persistent alert log
     if write_to_log:
-        _write_alert_to_log(mac, device_name, score, criticality)
+        _write_alert_to_log(mac, device_name, score, criticality, explanation)
     
     return criticality
 
-def _write_alert_to_log(mac, device_name, score, criticality):
+def _generate_alert_explanation(features, score, criticality):
+    """
+    Generate human-readable explanation for why the alert was triggered.
+    
+    Args:
+        features: Dictionary with device behavioral features
+        score: Anomaly score
+        criticality: Criticality level
+        
+    Returns:
+        str: Explanation text
+    """
+    if not features:
+        return "Device behavior significantly deviates from learned baseline"
+    
+    reasons = []
+    
+    # Analyze RSSI (signal strength)
+    if 'mean_rssi' in features:
+        rssi = features['mean_rssi']
+        if rssi < -90:
+            reasons.append("extremely weak signal (possible distance spoofing)")
+        elif rssi > -30:
+            reasons.append("unusually strong signal (possible proximity attack)")
+    
+    # Analyze interval patterns
+    if 'mean_interval_ms' in features:
+        interval = features['mean_interval_ms']
+        if interval < 50:
+            reasons.append("rapid packet flooding detected")
+        elif interval > 2000:
+            reasons.append("abnormal slow transmission pattern")
+        elif 'interval_std' in features and features['interval_std'] > 500:
+            reasons.append("highly erratic transmission timing")
+    
+    # Analyze packet count
+    if 'packet_count' in features:
+        count = features['packet_count']
+        if count > 100:
+            reasons.append(f"excessive packet volume ({count} packets)")
+        elif count < 3:
+            reasons.append("insufficient data for reliable fingerprint")
+    
+    # Analyze service count
+    if 'services_count' in features:
+        services = features['services_count']
+        if services == 0:
+            reasons.append("no advertised services (stealth mode)")
+        elif services > 10:
+            reasons.append(f"unusually high service count ({services})")
+    
+    # Build explanation
+    if reasons:
+        return "; ".join(reasons[:2])  # Limit to 2 most relevant reasons
+    elif criticality == "HIGH":
+        return "Multiple behavioral anomalies detected"
+    elif criticality == "MEDIUM":
+        return "Behavioral pattern differs from baseline"
+    else:
+        return "Minor deviation from expected behavior"
+
+def _write_alert_to_log(mac, device_name, score, criticality, explanation=""):
     """
     Write alert information to a CSV log file for historical tracking.
     
@@ -51,6 +117,7 @@ def _write_alert_to_log(mac, device_name, score, criticality):
         device_name: Device name
         score: Anomaly score
         criticality: Criticality level (LOW/MEDIUM/HIGH)
+        explanation: Reason for the alert
     """
     try:
         alerts_file = str(ALERTS_PATH)
@@ -62,14 +129,15 @@ def _write_alert_to_log(mac, device_name, score, criticality):
         with open(alerts_file, 'a', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             if not file_exists:
-                writer.writerow(['timestamp', 'mac_address', 'device_name', 'anomaly_score', 'criticality'])
+                writer.writerow(['timestamp', 'mac_address', 'device_name', 'anomaly_score', 'criticality', 'reason'])
             
             writer.writerow([
                 time.strftime('%Y-%m-%d %H:%M:%S'),
                 mac,
                 device_name,
                 f"{score:.3f}",
-                criticality
+                criticality,
+                explanation
             ])
     except Exception as e:
         print(f"[Alert] Warning: Failed to write to alert log: {e}")

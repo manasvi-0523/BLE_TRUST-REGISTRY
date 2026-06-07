@@ -92,7 +92,17 @@ async def run_security_cycle(scanner, ai_model, blockchain, scan_duration, mode)
             if is_anomaly:
                 # PHASE 4: Trigger alerts for anomalies
                 score = ai_model.get_anomaly_score(fingerprint_row)
-                criticality = trigger_alert(mac, name, score)
+                
+                # Prepare device features for explanation
+                device_features = {
+                    'mean_rssi': row['mean_rssi'],
+                    'mean_interval_ms': row['mean_interval'],
+                    'interval_std': row.get('interval_std', 0),
+                    'packet_count': row['packet_count'],
+                    'services_count': row.get('services_count', 0)
+                }
+                
+                criticality = trigger_alert(mac, name, score, device_features=device_features)
                 
                 anomalies_detected.append({
                     "mac": mac,
