@@ -7,6 +7,27 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import BLE_DATA_PATH
 
+def first_valid_name(series):
+    """
+    Extract the first valid (non-UNKNOWN) name from a series of name values.
+    
+    BLE devices may not advertise names in every packet. This function
+    searches through all captured names to find the first valid one.
+    
+    Args:
+        series: Pandas series of device name values
+        
+    Returns:
+        str: First valid name found, or "UNKNOWN" if none found
+    """
+    for name in series:
+        if pd.notna(name):
+            cleaned = str(name).strip()
+            # Skip obvious placeholder values
+            if cleaned and cleaned.upper() not in ["UNKNOWN", "UNKNOWN DEVICE", "NONE", "NAN", ""]:
+                return cleaned
+    return "UNKNOWN"
+
 def extract_features(csv_path=None):
     """
     Extract behavioral fingerprints from raw BLE scan data.
@@ -53,23 +74,19 @@ def extract_features(csv_path=None):
         'interval_ms': ['mean', 'std'],
         'timestamp': 'count',  # packet count (count any column)
         'services_count': 'max',
-        'name': 'first'
+        'name': first_valid_name  # Use custom function to get first valid name
     })
     
-    # Flatten multi-level columns created by agg()
-    # When as_index=False, mac_address becomes a regular column, and agg creates MultiIndex columns
-    features_df.columns = ['_'.join(col).strip('_') if isinstance(col, tuple) else col 
-                           for col in features_df.columns.values]
-    
-    # Rename columns to meaningful names
-    features_df.rename(columns={
-        'rssi_mean': 'mean_rssi',
-        'interval_ms_mean': 'mean_interval',
-        'interval_ms_std': 'std_interval',
-        'timestamp_count': 'packet_count',
-        'services_count_max': 'services_count',
-        'name_first': 'name'
-    }, inplace=True)
+    # Flatten and rename columns for clarity
+    features_df.columns = [
+        'mac_address',
+        'mean_rssi',
+        'mean_interval',
+        'std_interval',
+        'packet_count',
+        'services_count',
+        'name'
+    ]
     
     # Fill NaN std values (single packet devices) with 0
     features_df['std_interval'] = features_df['std_interval'].fillna(0)
