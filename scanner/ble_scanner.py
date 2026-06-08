@@ -40,7 +40,15 @@ class SignatureScanner:
         timestamp = time.time()
         mac_address = device.address
         rssi = advertisement_data.rssi
-        name = device.name or "Unknown"
+        
+        # BLE devices often omit names for privacy. Preserve the last known name when possible.
+        name = (
+            advertisement_data.local_name  # Try local name first
+            or device.name  # Then device name
+            or self.devices_data.get(mac_address, {}).get("name")  # Then cached name
+            or "UNKNOWN"  # Finally, mark as unknown
+        )
+        
         services = advertisement_data.service_uuids
         services_count = len(services) if services else 0
         

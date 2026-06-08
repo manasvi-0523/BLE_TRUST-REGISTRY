@@ -16,41 +16,46 @@ class AttackSimulator:
             'name': 'Spoofed_JioSTB_Attacker',
             'mac': 'AA:BB:CC:DD:EE:FF',
             'description': 'Device pretending to be your TV',
-            'rssi_pattern': lambda: random.randint(-55, -45),  # Different signal strength
-            'interval_pattern': lambda: random.uniform(50, 150),  # Much faster advertising
-            'services': 2  # Different service count
+            'rssi_pattern': lambda: random.randint(-55, -45),
+            'interval_pattern': lambda: random.uniform(80, 250),  # Abnormal timing
+            'services': 2,
+            'packet_count': (40, 100)  # Range for realistic attack
         },
         'flooding': {
-            'name': 'BLE_Flooder_Attack',
+            'name': 'BLE_FLOOD_ATTACK',
             'mac': '11:22:33:44:55:66',
             'description': 'Rapid packet flooding attack',
-            'rssi_pattern': lambda: random.randint(-40, -30),  # Strong signal
-            'interval_pattern': lambda: random.uniform(1, 10),  # VERY fast (1-10ms)
-            'services': 0
+            'rssi_pattern': lambda: random.randint(-45, -20),  # Very strong signal
+            'interval_pattern': lambda: random.uniform(5, 25),  # VERY fast (5-25ms) 
+            'services': 0,
+            'packet_count': (150, 300)  # High packet volume
         },
         'scanner': {
             'name': 'Malicious_Scanner',
             'mac': 'DE:AD:BE:EF:CA:FE',
             'description': 'Reconnaissance scanner device',
-            'rssi_pattern': lambda: random.randint(-70, -50),  # Variable signal
+            'rssi_pattern': lambda: random.randint(-70, -50),
             'interval_pattern': lambda: random.uniform(2000, 5000),  # Very slow
-            'services': 5  # Unusual number of services
+            'services': 5,
+            'packet_count': (30, 60)
         },
         'erratic': {
-            'name': 'Unstable_Device_Attack',
+            'name': 'Unstable_ROGUE_Device',
             'mac': 'BA:D1:DE:A0:00:00',
             'description': 'Device with highly erratic behavior',
             'rssi_pattern': lambda: random.randint(-90, -20),  # Wildly varying
             'interval_pattern': lambda: random.choice([5, 50, 500, 5000]),  # Extremely inconsistent
-            'services': 10  # Suspicious service count
+            'services': 10,
+            'packet_count': (60, 120)
         },
-        'rogue_ap': {
-            'name': 'Rogue_AccessPoint',
+        'rogue_unknown': {
+            'name': 'UNKNOWN',  # Simulates unknown device with suspicious behavior
             'mac': 'FA:KE:AP:01:02:03',
-            'description': 'Fake access point attempting MITM',
-            'rssi_pattern': lambda: random.randint(-35, -25),  # Very strong signal
-            'interval_pattern': lambda: random.uniform(100, 200),  # Regular but suspicious
-            'services': 8  # Many services advertised
+            'description': 'Unknown device with no services and abnormal timing',
+            'rssi_pattern': lambda: random.randint(-75, -40),
+            'interval_pattern': lambda: random.uniform(30, 100),
+            'services': 0,  # No services
+            'packet_count': (60, 120)
         }
     }
     
@@ -98,13 +103,15 @@ class AttackSimulator:
             last_timestamp = start_time
             
             for i in range(packet_count):
-                current_time = start_time + (i * interval_between_packets)
-                
-                # Calculate interval from last packet
+                # Generate interval from attack pattern instead of uniform distribution
                 if i == 0:
                     interval_ms = 0.0
+                    current_time = start_time
                 else:
-                    interval_ms = round((current_time - last_timestamp) * 1000, 2)
+                    # Use the attack's interval pattern
+                    generated_interval_ms = attack['interval_pattern']()
+                    current_time = last_timestamp + (generated_interval_ms / 1000.0)
+                    interval_ms = generated_interval_ms
                 
                 # Generate attack behavior
                 rssi = attack['rssi_pattern']()

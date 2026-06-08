@@ -31,15 +31,19 @@ SCAN_CYCLES_MONITOR = 5  # number of monitoring cycles in demo
 
 # AI Model settings
 MIN_DEVICES_FOR_MODEL = 3  # minimum devices needed to train model
-CONTAMINATION_RATE = 0.1  # proportion of outliers expected (10%)
+CONTAMINATION_RATE = 0.15  # proportion of outliers expected (15%)
 DYNAMIC_CONTAMINATION_THRESHOLD = 10  # switch to dynamic contamination above this many devices
 
 # Blockchain settings
 MAX_BLOCKS_DISPLAY = 10  # maximum blocks to display in summary
 
-# Alert settings
+# Alert settings - LEGACY (now using hybrid scoring)
 ALERT_CRITICALITY_HIGH = -0.2  # anomaly score threshold for HIGH criticality
 ALERT_CRITICALITY_MEDIUM = -0.1  # anomaly score threshold for MEDIUM criticality
+
+# Hybrid Risk Scoring Thresholds
+RISK_SCORE_HIGH = 70  # Combined score for HIGH risk
+RISK_SCORE_MEDIUM = 40  # Combined score for MEDIUM risk
 
 # Feature engineering
 FEATURES_FOR_MODEL = ['mean_rssi', 'mean_interval', 'std_interval', 'packet_count', 'services_count']

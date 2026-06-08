@@ -90,25 +90,22 @@ async def run_security_cycle(scanner, ai_model, blockchain, scan_duration, mode)
             }
             
             if is_anomaly:
-                # PHASE 4: Trigger alerts for anomalies
+                # PHASE 4: Trigger alerts using HYBRID SCORING
                 score = ai_model.get_anomaly_score(fingerprint_row)
                 
-                # Prepare device features for explanation
-                device_features = {
-                    'mean_rssi': row['mean_rssi'],
-                    'mean_interval_ms': row['mean_interval'],
-                    'interval_std': row.get('interval_std', 0),
-                    'packet_count': row['packet_count'],
-                    'services_count': row.get('services_count', 0)
-                }
+                # Prepare device features for hybrid scoring
+                device_features = row  # Pass entire row (pandas Series)
                 
-                criticality = trigger_alert(mac, name, score, device_features=device_features)
+                criticality, final_score, reasons = trigger_alert(
+                    mac, name, score, device_features=device_features
+                )
                 
                 anomalies_detected.append({
                     "mac": mac,
                     "name": name,
                     "score": score,
-                    "criticality": criticality
+                    "criticality": criticality,
+                    "final_score": final_score
                 })
             else:
                 # Add normal devices to blockchain
