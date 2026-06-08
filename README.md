@@ -241,9 +241,8 @@ This is a research prototype. Academic evaluation and demonstration, yes. Produc
 ## Team
 
 **Team NEXUS ONLINE**
-Cybersecurity and Blockchain Division, Idea Lab
+Cybersecurity and Blockchain Division
 Don Bosco Institute of Technology, Bengaluru
-Faculty Supervisor: Dr. Sheeba
 
 ---
 
