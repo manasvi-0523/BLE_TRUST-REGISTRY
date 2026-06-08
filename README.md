@@ -252,7 +252,7 @@ Don Bosco Institute of Technology, Bengaluru
 | Mithun Gowda B | [@mithun50](https://github.com/mithun50) | mithungowda.b7411@gmail.com | BLE scanner, detection callback, interval calculation, CSV logging |
 | Nevil Anson D'Souza | [@nevil06](https://github.com/nevil06) | nevilansondsouza@gmail.com | Flask dashboard, API routes, frontend templates, scan controls |
 | Manas Kiran Habbu | [@Manas-H13](https://github.com/Manas-H13) | manaskiranhabbu@gmail.com | Alert system, criticality thresholds, alert logging, config management |
-| Naren Bhaskar | [@narenvk-29](https://github.com/narenvk-29) | narenbhaskar2007@gmail.com | Testing, attack validation, comprehensive test suite, documentation |
+| Naren V| [@narenvk-29](https://github.com/narenvk-29) | narenbhaskar2007@gmail.com | Testing, attack validation, comprehensive test suite, documentation |
 
 ---
 
