@@ -39,44 +39,137 @@ Most BLE security research goes the cryptographic route. This project takes a di
 
 ## Architecture
 
+### System Component Overview
+
+```mermaid
+graph TD
+    A[main.py<br/>baseline / monitor mode] --> B[scanner/ble_scanner.py<br/>bleak async BLE scan]
+    B --> C[(dataset/ble_data.csv)]
+    C --> D[feature_engine/feature_extract.py<br/>per-device aggregation]
+    D --> E{Mode?}
+
+    E -- baseline --> F[ai_model/anomaly_detector.py<br/>Isolation Forest train]
+    F --> G[(isolation_forest.pkl)]
+    F --> H[blockchain/blockchain.py<br/>add trusted devices]
+    H --> I[(chain.json)]
+
+    E -- monitor --> J[ai_model/anomaly_detector.py<br/>Isolation Forest detect]
+    J --> K[ai_model/rule_based_detector.py<br/>rule scoring]
+    K --> L[alerts/alert_system.py<br/>hybrid risk calculation]
+    L --> M[(alerts/alerts.csv)]
+    L --> H
+
+    M --> N[dashboard.py<br/>Flask API]
+    I --> N
+    C --> N
+    N --> O[browser: http://127.0.0.1:5000]
 ```
-                  ┌──────────────────────────────────┐
-                  │           main.py                │
-                  │   (baseline / monitor mode)      │
-                  └──────────┬───────────────────────┘
-                             │
-           ┌─────────────────▼──────────────────────┐
-           │         scanner/ble_scanner.py          │
-           │   bleak async BLE scan -> ble_data.csv  │
-           └─────────────────┬──────────────────────┘
-                             │
-           ┌─────────────────▼──────────────────────┐
-           │    feature_engine/feature_extract.py   │
-           │  per-device aggregation: RSSI, interval│
-           │  std, packet count, services count     │
-           └──────────┬──────────────────────────────┘
-                      │
-         ┌────────────▼────────────┐
-         │  ai_model/              │
-         │  anomaly_detector.py    │
-         │  Isolation Forest       │
-         │  train() / detect()     │
-         └────────────┬────────────┘
-                      │
-      ┌───────────────┴──────────────────┐
-      │                                  │
-┌─────▼──────────────┐     ┌─────────────▼──────────┐
-│  alerts/           │     │  blockchain/            │
-│  alert_system.py   │     │  blockchain.py          │
-│  LOW/MEDIUM/HIGH   │     │  SHA-256 linked ledger  │
-│  -> alerts.csv     │     │  -> chain.json          │
-└────────────────────┘     └─────────────────────────┘
-                      │
-           ┌──────────▼──────────┐
-           │    dashboard.py     │
-           │    Flask + HTML     │
-           │  http://127.0.0.1:5000 │
-           └─────────────────────┘
+
+### Baseline Mode Data Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant M as main.py
+    participant S as BLE Scanner
+    participant F as Feature Engine
+    participant AI as Anomaly Detector
+    participant BC as Blockchain
+
+    U->>M: python main.py --mode baseline
+    M->>M: clear old dataset
+    M->>BC: initialize (genesis block)
+
+    loop N scan cycles (default: 2)
+        M->>S: run(scan_time=15s)
+        S->>S: async BLE advertisements
+        S-->>M: ble_data.csv updated
+        M->>F: extract_features(csv)
+        F-->>M: per-device DataFrame
+        loop each device
+            M->>BC: add_block(device_id, behavior)
+        end
+    end
+
+    M->>F: extract_features(accumulated csv)
+    F-->>M: final feature set
+    M->>AI: train(features_df)
+    AI->>AI: fit Isolation Forest
+    AI-->>M: model saved to isolation_forest.pkl
+    M-->>U: training complete summary
+```
+
+### Monitor Mode Data Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant M as main.py
+    participant S as BLE Scanner
+    participant F as Feature Engine
+    participant AI as Anomaly Detector
+    participant RB as Rule-Based Detector
+    participant AL as Alert System
+    participant BC as Blockchain
+
+    U->>M: python main.py --mode monitor
+    M->>BC: load + verify chain integrity
+    M->>AI: load_model()
+
+    loop N scan cycles (default: 5)
+        M->>S: run(scan_time=15s)
+        S-->>M: ble_data.csv updated
+        M->>F: extract_features(csv)
+        F-->>M: per-device DataFrame
+
+        loop each device
+            M->>AI: detect(row)
+            AI-->>M: prediction + anomaly_score
+            M->>RB: rule_based_detection(features)
+            RB-->>M: rule_score + reasons
+            M->>AL: calculate_final_risk()
+            AL-->>M: criticality + hybrid_score
+
+            alt anomaly detected
+                AL->>AL: log to alerts.csv
+                AL-->>U: console alert (LOW/MEDIUM/HIGH)
+            else normal device
+                M->>BC: add_block if new
+            end
+        end
+    end
+
+    M-->>U: final anomaly summary + blockchain validity
+```
+
+### Hybrid Detection Scoring
+
+```mermaid
+flowchart TD
+    A[Device Features<br/>rssi, interval, packet_count, services] --> B[Rule-Based Detector]
+    A --> C[Isolation Forest]
+
+    B --> B1{packet_count > 120?}
+    B1 -- yes --> B2[+40 pts]
+    B --> B3{mean_interval < 50ms?}
+    B3 -- yes --> B4[+40 pts]
+    B --> B5{RSSI > -30 dBm?}
+    B5 -- yes --> B6[+20 pts]
+    B --> B7{attack keyword in name?}
+    B7 -- yes --> B8[+50 pts]
+    B --> B9[other rules...]
+    B2 & B4 & B6 & B8 & B9 --> B10[rule_score 0-100+]
+
+    C --> C1[decision_function score]
+    C1 --> C2[normalize to 0-40 AI contribution]
+
+    B10 --> D[final_score = rule_score + ai_contribution]
+    C2 --> D
+
+    D --> E{Threshold?}
+    E -- score >= 70 --> F[HIGH]
+    E -- score >= 40 --> G[MEDIUM]
+    E -- score < 40 --> H[LOW]
 ```
 
 ---

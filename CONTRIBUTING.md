@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to the BLE Trust Registry project! This document provides guidelines for contributing to this research prototype.
 
-## 🎯 Project Overview
+## Project Overview
 
 This is an academic research project exploring behavioral anomaly detection for Bluetooth Low Energy devices. Contributions are welcome in the areas of:
 
@@ -12,7 +12,7 @@ This is an academic research project exploring behavioral anomaly detection for 
 - Bug fixes and testing
 - Performance optimizations
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -35,7 +35,7 @@ venv\Scripts\activate  # Windows
 pip install -r requirements.txt
 ```
 
-## 📝 How to Contribute
+## How to Contribute
 
 ### 1. Fork and Clone
 
@@ -118,7 +118,7 @@ Then create a Pull Request on GitHub with:
 - Reference to related issues
 - Screenshots/logs if applicable
 
-## 🐛 Reporting Bugs
+## Reporting Bugs
 
 When reporting bugs, include:
 
@@ -126,13 +126,13 @@ When reporting bugs, include:
 2. **Steps to Reproduce**: Numbered steps to reproduce
 3. **Expected Behavior**: What should happen
 4. **Actual Behavior**: What actually happens
-5. **Environment**: 
+5. **Environment**:
    - OS version
    - Python version
    - BLE adapter details
 6. **Logs**: Relevant error messages or logs
 
-## 💡 Suggesting Enhancements
+## Suggesting Enhancements
 
 For feature requests, include:
 
@@ -141,7 +141,7 @@ For feature requests, include:
 3. **Alternatives**: Other solutions considered
 4. **Impact**: Who benefits from this?
 
-## 📚 Areas for Contribution
+## Areas for Contribution
 
 ### High Priority
 - Cross-platform BLE scanning support (Linux/macOS)
@@ -167,7 +167,7 @@ For feature requests, include:
 - Device trust scoring system
 - Merkle tree blockchain verification
 
-## 🔍 Code Review Process
+## Code Review Process
 
 1. All contributions require review
 2. Reviewers check for:
@@ -178,7 +178,7 @@ For feature requests, include:
 3. Address review feedback promptly
 4. Maintainers will merge when approved
 
-## 📖 Coding Standards
+## Coding Standards
 
 ### Python Style
 - Follow PEP 8
@@ -198,7 +198,7 @@ For feature requests, include:
 - Squash commits if requested
 - No merge commits in feature branches
 
-## 🔒 Security
+## Security
 
 If you discover a security vulnerability:
 
@@ -207,11 +207,11 @@ If you discover a security vulnerability:
 3. Provide detailed description
 4. Wait for response before disclosure
 
-## 📄 License
+## License
 
 By contributing, you agree that your contributions will be licensed under the same license as the project (MIT License).
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 Contributions of all kinds are appreciated:
 - Code contributions
@@ -220,7 +220,7 @@ Contributions of all kinds are appreciated:
 - Documentation improvements
 - Testing and feedback
 
-## 📞 Contact
+## Contact
 
 - **Project Lead**: Team NEXUS ONLINE
 - **Institution**: Don Bosco Institute of Technology, Bengaluru
@@ -229,4 +229,4 @@ Contributions of all kinds are appreciated:
 
 ---
 
-Thank you for contributing to BLE Trust Registry! 🔐🔗
+Thank you for contributing to BLE Trust Registry.
