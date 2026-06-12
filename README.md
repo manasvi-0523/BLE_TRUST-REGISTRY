@@ -1,127 +1,148 @@
 # BLE Trust Registry
 
-BLE Trust Registry is a real-time BLE trust monitoring system. It watches the local Bluetooth Low Energy environment, learns trusted device behavior, detects identity drift, surfaces risky activity without delay, and records serious incidents in a tamper-evident hash-chain ledger.
+**Real-time Trust Monitoring for Bluetooth Low Energy Devices**
 
-This project is built as a serious monitoring console, not a glossy landing page and not a simulation-first toy. The core flow is live scanner to validated backend event, WebSocket stream, buffered dashboard update, risk engine decision, alert, and ledger record.
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-BLE%20Scanner-green.svg)](https://fastapi.tiangolo.com/)
+[![Status](https://img.shields.io/badge/Status-Professional%20Prototype-orange.svg)](#)
 
-## The Idea
+## Overview
 
-BLE environments are noisy. Nearby devices can appear with weak names, changing payloads, random addresses, and incomplete identity signals. A basic scanner only lists devices. BLE Trust Registry turns those observations into a trust workflow:
+BLE Trust Registry is a defensive monitoring system for Bluetooth Low Energy environments. It watches nearby BLE advertisements in real time, resolves practical device identity, trains trusted baselines, detects suspicious behavior, and records serious incidents in a tamper-evident hash-chain ledger.
 
-1. Observe live BLE advertisements.
-2. Resolve the clearest possible device identity.
-3. Train trusted baselines for devices you own.
-4. Compare live behavior against historical expectations.
-5. Show normal unknown devices without panic.
-6. Escalate only when evidence supports High or Critical risk.
-7. Preserve serious incidents in a local hash-chain ledger.
+The project is designed as a serious security dashboard. It is not a simulation-first template. Live scanner events move through a validation layer, WebSocket stream, frontend event buffer, anomaly engine, alert system, and local ledger.
 
-## System Architecture
+## The Problem
+
+BLE devices advertise constantly. In a busy lab, campus, office, or hospital environment, many devices appear with weak names, changing addresses, unstable signal strength, and incomplete identity metadata. A basic BLE scanner can show nearby devices, but it does not answer the more important question:
+
+**Does this device still behave like the device we trusted before?**
+
+BLE Trust Registry approaches this as a behavioral trust problem. It does not assume every unknown device is malicious. It watches behavior over time, compares trusted devices against saved baselines, and escalates only when evidence supports the risk.
+
+## What It Does
+
+- Performs live BLE scanning through an asynchronous FastAPI backend.
+- Resolves readable display names from advertised names, cached names, manufacturer clues, service UUID hints, and address suffixes.
+- Validates scan events before they are broadcast to the dashboard.
+- Streams events through a single WebSocket lifecycle manager.
+- Buffers incoming events so the dashboard remains responsive.
+- Maintains the latest device state indexed by BLE address.
+- Trains trusted baselines from observed live samples.
+- Detects RSSI, frequency, payload, UUID, timing, fingerprint, and identity drift.
+- Shows High and Critical trust violations immediately.
+- Stores serious incidents in a local hash-chain ledger.
+
+## System Component Overview
 
 ```mermaid
-flowchart TD
-    A["BLE Radio Environment"] --> B["Async BLE Scanner"]
-    B --> C["Name Resolver"]
-    C --> D["Feature Extractor"]
-    D --> E["Rolling Frequency Window"]
-    E --> F["Pydantic Validation"]
-    F --> G["FastAPI Control Plane"]
-    F --> H["WebSocket Event Stream"]
+graph TD
+    A[BLE Radio Environment] --> B[scanner-backend<br/>Async BLE scanner]
+    B --> C[name_resolver.py<br/>Identity enrichment]
+    C --> D[models.py<br/>Pydantic validation]
+    D --> E[main.py<br/>FastAPI control plane]
+    E --> F[/ws/scan-events<br/>WebSocket stream]
 
-    H --> I["Single Frontend WebSocket Manager"]
-    I --> J["500 ms Event Buffer"]
-    J --> K["Latest Device State By Address"]
-    K --> L["Runtime History Cache"]
-    L --> M["Anomaly Engine"]
-    M --> N["Trust Classification"]
+    F --> G[frontend/lib/websocket.ts<br/>Single lifecycle manager]
+    G --> H[Event buffer<br/>500 ms batch flush]
+    H --> I[Device state map<br/>Indexed by BLE address]
+    I --> J[Runtime analysis<br/>Rolling history]
+    J --> K[anomalyEngine.ts<br/>Trust scoring]
 
-    N --> O["Immediate Alert Banner"]
-    N --> P["Live BLE Device Table"]
-    N --> Q["Selected Device Diagnosis"]
-    N --> R["Hash-chain Ledger"]
+    K --> L[Alert banner<br/>Immediate High or Critical status]
+    K --> M[Live BLE table<br/>Stable device rows]
+    K --> N[Diagnosis panel<br/>Evidence and recommended action]
+    K --> O[hashChain.ts<br/>Tamper-evident ledger]
 ```
 
-## Live Monitoring Workflow
+## Runtime Data Flow
 
 ```mermaid
 sequenceDiagram
     participant BLE as BLE Device
-    participant Scanner as Scanner Backend
-    participant Validator as Payload Validator
+    participant Scanner as Async Scanner
+    participant API as FastAPI Backend
     participant WS as WebSocket Stream
-    participant Buffer as Event Buffer
-    participant Engine as Risk Engine
+    participant Buffer as Frontend Buffer
+    participant Engine as Anomaly Engine
     participant UI as Dashboard
-    participant Ledger as Hash Ledger
+    participant Ledger as Hash-chain Ledger
 
     BLE->>Scanner: Advertisement packet appears
-    Scanner->>Scanner: Resolve name and extract BLE features
-    Scanner->>Validator: Build structured scan payload
-    Validator-->>Scanner: Accept only valid event shape
-    Scanner->>WS: Broadcast event without blocking scanner
-    WS->>Buffer: Queue event inside frontend lifecycle manager
-    Buffer->>UI: Flush latest events in batches
-    UI->>Engine: Score behavior and identity evidence
-    Engine-->>UI: Return risk level, trust status, and reasons
-    UI->>UI: Update affected rows, stats, and diagnosis panel
-    Engine->>Ledger: Append High or Critical incidents
+    Scanner->>Scanner: Extract RSSI, UUIDs, payload size, timestamp
+    Scanner->>Scanner: Calculate rolling advertisement frequency
+    Scanner->>API: Submit structured scan event
+    API->>API: Reject invalid payloads
+    API->>WS: Broadcast valid event without blocking scanner
+    WS->>Buffer: Queue event in frontend buffer
+    Buffer->>UI: Flush latest batch to dashboard state
+    UI->>Engine: Score current device behavior
+    Engine-->>UI: Return risk level, trust status, evidence
+    UI->>UI: Update alert, table, diagnosis, and counters
+    Engine->>Ledger: Append High or Critical incident
 ```
 
-## Trust Decision Pipeline
+## Trust Scoring Pipeline
 
 ```mermaid
-flowchart LR
-    A["Incoming Event"] --> B["Normalize Missing Fields"]
-    B --> C["Index By BLE Address"]
-    C --> D["Update Rolling History"]
-    D --> E["Check Trusted Baseline"]
-    D --> F["Check Timing Behavior"]
-    D --> G["Check Fingerprint Stability"]
-    D --> H["Check Name And Address Collisions"]
+flowchart TD
+    A[Incoming BLE scan event] --> B[Normalize missing fields]
+    B --> C[Merge by BLE address]
+    C --> D[Update rolling device history]
+    D --> E{Trusted baseline exists?}
 
-    E --> I["Risk Score"]
-    F --> I
-    G --> I
-    H --> I
+    E -- yes --> F[Compare RSSI, frequency, payload, UUID count]
+    E -- no --> G[Warmup unknown device safely]
 
-    I --> J{"Risk Level"}
-    J -->|Low| K["Trusted, Observing, or Unregistered"]
-    J -->|Medium| L["Suspicious"]
-    J -->|High| M["Anomaly Detected"]
-    J -->|Critical| N["Trust Violation"]
+    D --> H[Analyze timing behavior]
+    D --> I[Analyze fingerprint stability]
+    D --> J[Detect name and address collision]
 
-    M --> O["Alert Banner"]
-    N --> O
-    M --> P["Ledger Entry"]
-    N --> P
+    F --> K[Risk score]
+    G --> K
+    H --> K
+    I --> K
+    J --> K
+
+    K --> L{Risk level}
+    L -- Low --> M[Trusted, Observing, or Unregistered]
+    L -- Medium --> N[Suspicious]
+    L -- High --> O[Anomaly Detected]
+    L -- Critical --> P[Trust Violation]
+
+    O --> Q[Immediate alert]
+    P --> Q
+    O --> R[Ledger entry]
+    P --> R
 ```
 
-## Pipeline Workflow
+## Pipeline Explanation
 
-The system pipeline begins at the BLE radio layer. Nearby BLE devices continuously emit advertisement packets, and the scanner backend observes those packets without forcing the dashboard to wait. Every scan event is converted into a structured security signal containing identity hints, RSSI, advertisement frequency, service UUID count, manufacturer data length, payload length, timestamp, and event source.
+The scanner backend starts the pipeline by listening for BLE advertisements. It extracts the practical security fields that matter for behavior analysis: signal strength, service UUID count, manufacturer data length, approximate payload length, advertisement frequency, timestamp, source, and display identity.
 
-The backend then performs name resolution and validation. The name resolver tries to produce a useful display name from advertised names, cached names, manufacturer clues, service UUID guesses, and address suffixes. After enrichment, Pydantic validation acts as the gatekeeper. Invalid or malformed payloads stop at the backend and are not broadcast into the live monitor.
+Name resolution improves raw BLE output before it reaches the UI. The backend uses advertised names when available, cached address names when useful, manufacturer clues when possible, service UUID guesses when helpful, and a BLE address suffix as the final fallback. This makes the dashboard readable without pretending that a guessed name proves trust.
 
-Valid events move through the WebSocket stream. The frontend uses one WebSocket lifecycle manager so reconnects do not create duplicate listeners. Events are received immediately, placed into a short buffer, and flushed into React state in batches. This is what keeps the dashboard responsive during live scanning instead of freezing on every advertisement.
+Validation is the system gate. Events must match the expected scan payload before they are broadcast. This protects the dashboard from malformed controlled test events and keeps frontend assumptions stable.
 
-Once events reach the dashboard state, devices are indexed by BLE address. The latest state for each address is kept fast to access, while recent history is capped to the useful window needed for scoring. That rolling history feeds timing checks, fingerprint checks, RSSI analysis, advertisement frequency behavior, payload drift, and service UUID changes.
+The frontend receives events through one WebSocket manager. It does not create duplicate listeners after reconnects. Incoming events are queued in a buffer and flushed in batches, which keeps the UI responsive even when BLE advertisements arrive quickly.
 
-The anomaly engine does not treat unknown devices as guilty by default. A new device starts as Observing while enough evidence is collected. If it remains normal after warmup, it becomes Unregistered with Low risk. A device becomes Trusted only after a baseline is saved. When a trusted device deviates from its baseline, or when identity collision and behavior drift appear together, the risk level moves toward Suspicious, High, or Critical.
+The dashboard then keeps the latest device state indexed by address. This lets table rows update smoothly instead of re-rendering the whole dashboard for every event. Recent history is capped to the useful analysis window, so memory use remains controlled during long monitoring sessions.
 
-High and Critical events are treated differently from ordinary scan noise. They update the alert banner immediately and are written into the hash-chain ledger. The ledger links each incident to the previous hash so local tampering becomes visible when integrity is checked.
+The anomaly engine is evidence-driven. Unknown devices begin as Observing. If they remain normal after warmup, they stay Low risk as Unregistered. A device becomes Trusted only after a baseline is saved. When trusted behavior drifts across frequency, RSSI, payload, UUID count, timing, fingerprint, or identity evidence, the risk score rises.
 
-The result is a live trust workflow: scan, enrich, validate, stream, buffer, index, score, alert, and record. Each stage has a clear responsibility, which keeps the project understandable, testable, and practical to run from a fresh clone.
+High and Critical results bypass slow visual treatment. The alert banner changes immediately, the diagnosis panel explains the evidence, and the incident is appended to the hash-chain ledger.
 
 ## Installation
 
-Install:
+Install these first:
 
 - Python 3.11 or newer
 - Node.js 20 or newer
 - A BLE capable adapter
 - PowerShell or Command Prompt
 
-Clone and enter the app:
+Clone the repository:
 
 ```powershell
 git clone https://github.com/manasvi-0523/BLE_TRUST-REGISTRY.git
@@ -144,55 +165,42 @@ cd ..\frontend
 npm.cmd install
 ```
 
-## Run
+## Usage
 
-From the application root:
+Start both services:
 
 ```powershell
 cd BLE_TRUST-REGISTRY
 .\scripts\start-dev.cmd
 ```
 
-Open:
+Open the dashboard:
 
 ```text
 http://localhost:3000
 ```
 
-Backend status:
+Check backend status:
 
 ```text
 http://127.0.0.1:8000/status
 ```
 
-## Manual Run
-
-Backend:
+Manual backend run:
 
 ```powershell
 cd BLE_TRUST-REGISTRY\scanner-backend
 python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-Frontend:
+Manual frontend run:
 
 ```powershell
 cd BLE_TRUST-REGISTRY\frontend
 npm.cmd run dev
 ```
 
-## Dashboard Behavior
-
-- Alert banner stays solid and readable.
-- Live BLE table stays solid and dense.
-- Secondary panels use restrained glassmorphism only.
-- WebSocket events are batched before chart or table state updates.
-- Device state is indexed by address for fast lookup.
-- High and Critical alerts are not delayed by animation.
-- Recent scan history is capped to avoid runaway memory growth.
-- Hash-chain logging does not block the scanner loop.
-
-## Backend API
+## API Surface
 
 ```text
 GET  /status
@@ -202,7 +210,20 @@ POST /scan-event
 WS   /ws/scan-events
 ```
 
+## Dashboard Principles
+
+- Alert banner stays solid and readable.
+- Live BLE table stays solid, dense, and stable.
+- Secondary panels use restrained glassmorphism only.
+- High and Critical alerts render immediately.
+- Device rows use stable BLE address keys.
+- WebSocket events are batched before state updates.
+- Recent history is capped to avoid runaway memory growth.
+- Hash-chain logging does not block live monitoring.
+
 ## Documentation
+
+Additional guides are available in:
 
 ```text
 docs/architecture.md
@@ -210,6 +231,19 @@ docs/workflow.md
 docs/installation.md
 docs/troubleshooting.md
 ```
+
+## Limitations
+
+- BLE names are not proof of identity.
+- Address randomization can make long-term tracking harder.
+- RSSI varies with distance, walls, antenna orientation, and environment.
+- Browser local storage is not a secure database.
+- The hash-chain ledger detects local chain tampering, but it does not prevent deletion.
+- This project is a defensive prototype, not a production security appliance.
+
+## Ethical Scope
+
+Use this project only on devices and environments you own or have permission to monitor. The project does not include unauthorized BLE exploitation, credential capture, malicious payloads, device compromise, or offensive automation.
 
 ## Contributors
 
@@ -220,7 +254,3 @@ docs/troubleshooting.md
 | Naren V | Developer | UI design | narenbhaskar2007@gmail.com |
 | Manas Habbu | Developer | Documentation, presentation, design | manaskiranhabbu@gmail.com |
 | Manasvi R | Developer | Documentation, presentation, design | manasvi0523@gmail.com |
-
-## Ethical Scope
-
-This project is defensive. It is meant for devices and environments you own or have permission to monitor. It does not include unauthorized BLE exploitation, credential capture, malicious payloads, device compromise, or offensive automation.
