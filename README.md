@@ -223,14 +223,6 @@ WS   /ws/scan-events
 
 ## Documentation
 
-Additional guides are available in:
-
-```text
-docs/architecture.md
-docs/workflow.md
-docs/installation.md
-docs/troubleshooting.md
-```
 
 ## Limitations
 
@@ -249,8 +241,8 @@ Use this project only on devices and environments you own or have permission to 
 
 | Name | Role | Responsibilities | Contact |
 | --- | --- | --- | --- |
-| Manasvi R | Lead Developer | BLE trust registry development, dashboard workflow, documentation, presentation, and design | manasvi0523@gmail.com |
+| Manasvi R | Core Developer | BLE trust registry development, dashboard workflow, documentation, presentation, and design | manasvi0523@gmail.com |
 | Mithun Gowda B | Controlled Attack Developer | Controlled BLE spoofing attack setup using Kali Linux and test support | mithungowda.b7411@gmail.com |
 | Nevil Dsouza | Tester | Testing, validation, and issue reporting | nevilansondsouza@gmail.com |
-| Naren V | Team Member | UI support, review, and project assistance | narenbhaskar2007@gmail.com |
-| Manas Habbu | Team Member | Documentation support, presentation support, and project assistance | manaskiranhabbu@gmail.com |
+| Manas Habbu | Developer | Documentation support, presentation support, and project assistance | manaskiranhabbu@gmail.com |
+| Naren V | Developer | UI support, review, and project assistance | narenbhaskar2007@gmail.com |
