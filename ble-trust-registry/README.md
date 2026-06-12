@@ -88,9 +88,10 @@ flowchart LR
 ```text
 ble-trust-registry/
   README.md
-  start-dev.cmd
-  start-backend.cmd
-  start-frontend.cmd
+  scripts/
+    start-dev.cmd
+    start-backend.cmd
+    start-frontend.cmd
   frontend/
     app/
       page.tsx
@@ -148,7 +149,7 @@ From the application root:
 
 ```powershell
 cd ble-trust-registry
-.\start-dev.cmd
+.\scripts\start-dev.cmd
 ```
 
 This starts:

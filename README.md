@@ -23,16 +23,17 @@ BLE_TRUST-REGISTRY/
     README.md
     frontend/
     scanner-backend/
-    start-dev.cmd
-    start-backend.cmd
-    start-frontend.cmd
+    scripts/
+      start-dev.cmd
+      start-backend.cmd
+      start-frontend.cmd
 ```
 
 ## Fast Start
 
 ```powershell
 cd ble-trust-registry
-.\start-dev.cmd
+.\scripts\start-dev.cmd
 ```
 
 Open:
@@ -46,4 +47,3 @@ Backend status:
 ```text
 http://127.0.0.1:8000/status
 ```
-

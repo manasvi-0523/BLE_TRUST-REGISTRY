@@ -60,7 +60,7 @@ After dependencies are installed:
 
 ```powershell
 cd BLE_TRUST-REGISTRY\ble-trust-registry
-.\start-dev.cmd
+.\scripts\start-dev.cmd
 ```
 
 ## Runtime Order
@@ -80,4 +80,3 @@ Dashboard:      http://localhost:3000
 Backend status: http://127.0.0.1:8000/status
 WebSocket:      ws://127.0.0.1:8000/ws/scan-events
 ```
-
