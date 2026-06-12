@@ -38,22 +38,22 @@ BLE Trust Registry approaches this as a behavioral trust problem. It does not as
 
 ```mermaid
 graph TD
-    A[BLE Radio Environment] --> B[scanner-backend<br/>Async BLE scanner]
-    B --> C[name_resolver.py<br/>Identity enrichment]
-    C --> D[models.py<br/>Pydantic validation]
-    D --> E[main.py<br/>FastAPI control plane]
-    E --> F[/ws/scan-events<br/>WebSocket stream]
+    A["BLE Radio Environment"] --> B["Scanner Backend: Async BLE scanner"]
+    B --> C["Name Resolver: Identity enrichment"]
+    C --> D["Models: Pydantic validation"]
+    D --> E["FastAPI Control Plane"]
+    E --> F["WebSocket Scan Event Stream"]
 
-    F --> G[frontend/lib/websocket.ts<br/>Single lifecycle manager]
-    G --> H[Event buffer<br/>500 ms batch flush]
-    H --> I[Device state map<br/>Indexed by BLE address]
-    I --> J[Runtime analysis<br/>Rolling history]
-    J --> K[anomalyEngine.ts<br/>Trust scoring]
+    F --> G["Frontend WebSocket Manager"]
+    G --> H["Event Buffer: 500 ms batch flush"]
+    H --> I["Device State Map: Indexed by BLE address"]
+    I --> J["Runtime Analysis: Rolling history"]
+    J --> K["Anomaly Engine: Trust scoring"]
 
-    K --> L[Alert banner<br/>Immediate High or Critical status]
-    K --> M[Live BLE table<br/>Stable device rows]
-    K --> N[Diagnosis panel<br/>Evidence and recommended action]
-    K --> O[hashChain.ts<br/>Tamper-evident ledger]
+    K --> L["Alert Banner: Immediate High or Critical status"]
+    K --> M["Live BLE Table: Stable device rows"]
+    K --> N["Diagnosis Panel: Evidence and recommended action"]
+    K --> O["Hash-chain Ledger: Tamper-evident incident log"]
 ```
 
 ## Runtime Data Flow
@@ -249,8 +249,8 @@ Use this project only on devices and environments you own or have permission to 
 
 | Name | Role | Responsibilities | Contact |
 | --- | --- | --- | --- |
-| Mithun Gowda B | Core Developer | Main development, full-stack development | mithungowda.b7411@gmail.com |
-| Nevil Dsouza | Team Leader | Core development, testing | nevilansondsouza@gmail.com |
-| Naren V | Developer | UI design | narenbhaskar2007@gmail.com |
-| Manas Habbu | Developer | Documentation, presentation, design | manaskiranhabbu@gmail.com |
-| Manasvi R | Developer | Documentation, presentation, design | manasvi0523@gmail.com |
+| Manasvi R | Lead Developer | BLE trust registry development, dashboard workflow, documentation, presentation, and design | manasvi0523@gmail.com |
+| Mithun Gowda B | Controlled Attack Developer | Controlled BLE spoofing attack setup using Kali Linux and test support | mithungowda.b7411@gmail.com |
+| Nevil Dsouza | Tester | Testing, validation, and issue reporting | nevilansondsouza@gmail.com |
+| Naren V | Team Member | UI support, review, and project assistance | narenbhaskar2007@gmail.com |
+| Manas Habbu | Team Member | Documentation support, presentation support, and project assistance | manaskiranhabbu@gmail.com |
