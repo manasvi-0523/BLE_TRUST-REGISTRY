@@ -5,15 +5,21 @@ import csv
 import os
 import sys
 import json
+import threading
+from collections import deque
+from queue import Empty, Queue
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import BLE_DATA_PATH
+from config import BLE_DATA_PATH, MAX_LIVE_SCAN_EVENTS, SCAN_EVENTS_PATH
 
 class SignatureScanner:
     def __init__(self):
         # Track devices to compute intervals and behavioral data
         self.devices_data = {}
+        self.recent_events = deque(maxlen=MAX_LIVE_SCAN_EVENTS)
+        self.write_queue = Queue()
+        self.stop_writer = threading.Event()
         
         # Setup dataset directory and CSV logger using centralized config
         self.csv_file = str(BLE_DATA_PATH)
@@ -27,6 +33,8 @@ class SignatureScanner:
         self.f = None
         self.writer = None
         self._initialize_csv()
+        self.writer_thread = threading.Thread(target=self._writer_loop, daemon=True)
+        self.writer_thread.start()
     
     def _load_device_aliases(self):
         """
@@ -56,8 +64,50 @@ class SignatureScanner:
     
     def __del__(self):
         """Ensure file handle is properly closed."""
+        self.close()
+
+    def close(self):
+        """Flush queued scan events and close file handles."""
+        if getattr(self, "stop_writer", None):
+            self.stop_writer.set()
+        if getattr(self, "writer_thread", None) and self.writer_thread.is_alive():
+            self.writer_thread.join(timeout=2)
         if self.f and not self.f.closed:
+            self.f.flush()
             self.f.close()
+
+    def _writer_loop(self):
+        """
+        Persist scan events off the BLE callback path.
+
+        Disk writes and flushes can stall high-frequency callbacks, so the
+        scanner only queues rows while this worker batches persistence.
+        """
+        pending_rows = 0
+        live_events_file = str(SCAN_EVENTS_PATH)
+        os.makedirs(os.path.dirname(live_events_file), exist_ok=True)
+
+        with open(live_events_file, "a", encoding="utf-8") as live_events:
+            while not self.stop_writer.is_set() or not self.write_queue.empty():
+                try:
+                    row, event = self.write_queue.get(timeout=0.2)
+                except Empty:
+                    if pending_rows:
+                        self.f.flush()
+                        live_events.flush()
+                        pending_rows = 0
+                    continue
+
+                self.writer.writerow(row)
+                live_events.write(json.dumps(event, separators=(",", ":")) + "\n")
+                pending_rows += 1
+
+                if pending_rows >= 25:
+                    self.f.flush()
+                    live_events.flush()
+                    pending_rows = 0
+
+                self.write_queue.task_done()
     
     def detection_callback(self, device, advertisement_data):
         timestamp = time.time()
@@ -94,20 +144,36 @@ class SignatureScanner:
             "services_count": services_count,
             "last_seen": timestamp
         }
+
+        event = {
+            "timestamp": timestamp,
+            "mac_address": mac_address,
+            "rssi": rssi,
+            "interval_ms": interval_ms,
+            "services_count": services_count,
+            "name": name
+        }
+        self.recent_events.append(event)
         
         # Print device information
         print(f"[{time.strftime('%H:%M:%S')}] MAC: {mac_address} | RSSI: {rssi:4} dBm | Interval: {interval_ms:7} ms | Services: {services_count} | Name: {name}")
 
-        # Export row to dataset for the AI model
-        self.writer.writerow([timestamp, mac_address, rssi, interval_ms, services_count, name])
-        self.f.flush()
+        # Export rows asynchronously so BLE callbacks stay responsive.
+        self.write_queue.put((
+            [timestamp, mac_address, rssi, interval_ms, services_count, name],
+            event
+        ))
 
     async def run(self, scan_time=15):
         print(f"Starting BLE Scanner for {scan_time} seconds (Behavioral Capture)...")
         scanner = BleakScanner(detection_callback=self.detection_callback)
-        await scanner.start()
-        await asyncio.sleep(scan_time)
-        await scanner.stop()
+        try:
+            await scanner.start()
+            await asyncio.sleep(scan_time)
+        finally:
+            await scanner.stop()
+            self.write_queue.join()
+            self.close()
         print("\n--- Scanning complete. Summary ---")
         print(f"Total Unique Devices Captured: {len(self.devices_data)}")
 

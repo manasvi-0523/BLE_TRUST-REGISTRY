@@ -13,6 +13,7 @@ ALERTS_DIR = BASE_DIR / "alerts"
 
 # File paths
 BLE_DATA_PATH = DATASET_DIR / "ble_data.csv"
+SCAN_EVENTS_PATH = DATASET_DIR / "live_scan_events.jsonl"
 ALERTS_PATH = ALERTS_DIR / "alerts.csv"
 CHAIN_PATH = BLOCKCHAIN_DIR / "chain.json"
 MODEL_PATH = AI_MODEL_DIR / "isolation_forest.pkl"
@@ -28,6 +29,8 @@ ALERTS_DIR.mkdir(exist_ok=True)
 SCAN_DURATION = 15  # seconds per scan cycle
 SCAN_CYCLES_BASELINE = 2  # number of cycles to establish baseline
 SCAN_CYCLES_MONITOR = 5  # number of monitoring cycles in demo
+MAX_LIVE_SCAN_EVENTS = 300  # bounded dashboard history for real-time updates
+MAX_DASHBOARD_ALERTS = 100  # cap alert payloads sent to the browser
 
 # AI Model settings
 MIN_DEVICES_FOR_MODEL = 3  # minimum devices needed to train model

@@ -4,12 +4,23 @@ Opens in browser to show real-time monitoring results
 """
 import os
 import json
+import csv
+import time
+from collections import deque
 from flask import Flask, render_template, jsonify, request
 from pathlib import Path
 import pandas as pd
 from datetime import datetime
 
-from config import BLE_DATA_PATH, ALERTS_PATH, CHAIN_PATH, MODEL_PATH
+from config import (
+    ALERTS_PATH,
+    BLE_DATA_PATH,
+    CHAIN_PATH,
+    MAX_DASHBOARD_ALERTS,
+    MAX_LIVE_SCAN_EVENTS,
+    MODEL_PATH,
+    SCAN_EVENTS_PATH,
+)
 
 app = Flask(__name__)
 
@@ -22,6 +33,107 @@ scan_status = {
     'message': 'Idle',
     'devices_found': 0
 }
+
+device_cache = {
+    'signature': None,
+    'payload': {'devices': [], 'count': 0}
+}
+advertisement_windows = {}
+
+def file_signature(path):
+    """Return a cheap file signature for cache invalidation."""
+    if not os.path.exists(path):
+        return None
+    stat = os.stat(path)
+    return (stat.st_mtime_ns, stat.st_size)
+
+def tail_jsonl(path, limit):
+    """Read only the latest JSONL events needed by the dashboard."""
+    if not os.path.exists(path):
+        return []
+
+    rows = deque(maxlen=limit)
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return list(rows)
+
+def validate_scan_event(payload):
+    """Validate controlled BLE test input before it reaches dashboard streams."""
+    if not isinstance(payload, dict):
+        raise ValueError('Payload must be a JSON object')
+
+    mac = payload.get('mac_address') or payload.get('mac')
+    if not isinstance(mac, str) or not mac.strip():
+        raise ValueError('mac_address is required')
+
+    try:
+        rssi = float(payload.get('rssi'))
+    except (TypeError, ValueError):
+        raise ValueError('rssi must be a number')
+
+    if rssi < -120 or rssi > 30:
+        raise ValueError('rssi is outside the expected BLE range')
+
+    try:
+        services_count = int(payload.get('services_count', 0))
+    except (TypeError, ValueError):
+        raise ValueError('services_count must be an integer')
+
+    if services_count < 0:
+        raise ValueError('services_count cannot be negative')
+
+    timestamp = payload.get('timestamp') or time.time()
+    try:
+        timestamp = float(timestamp)
+    except (TypeError, ValueError):
+        raise ValueError('timestamp must be a unix timestamp')
+
+    address_window = advertisement_windows.setdefault(mac, deque(maxlen=100))
+    interval_ms = 0.0
+    if address_window:
+        interval_ms = round((timestamp - address_window[-1]) * 1000, 2)
+    address_window.append(timestamp)
+
+    elapsed = address_window[-1] - address_window[0] if len(address_window) > 1 else 0
+    frequency_hz = round((len(address_window) - 1) / elapsed, 3) if elapsed > 0 else 0.0
+
+    return {
+        'timestamp': timestamp,
+        'mac_address': mac.strip(),
+        'rssi': rssi,
+        'interval_ms': interval_ms,
+        'services_count': services_count,
+        'name': str(payload.get('name') or 'UNKNOWN').strip() or 'UNKNOWN',
+        'advertisement_frequency_hz': frequency_hz
+    }
+
+def append_scan_event(event):
+    """Persist validated scan input for both model data and live dashboard use."""
+    os.makedirs(os.path.dirname(str(BLE_DATA_PATH)), exist_ok=True)
+
+    file_exists = os.path.exists(BLE_DATA_PATH) and os.path.getsize(BLE_DATA_PATH) > 0
+    with open(BLE_DATA_PATH, 'a', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(['timestamp', 'mac_address', 'rssi', 'interval_ms', 'services_count', 'name'])
+        writer.writerow([
+            event['timestamp'],
+            event['mac_address'],
+            event['rssi'],
+            event['interval_ms'],
+            event['services_count'],
+            event['name']
+        ])
+
+    with open(SCAN_EVENTS_PATH, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(event, separators=(',', ':')) + '\n')
 
 @app.route('/')
 def index():
@@ -47,6 +159,10 @@ def get_devices():
         return jsonify({'devices': [], 'count': 0})
     
     try:
+        signature = file_signature(BLE_DATA_PATH)
+        if device_cache['signature'] == signature:
+            return jsonify(device_cache['payload'])
+
         df = pd.read_csv(BLE_DATA_PATH)
         
         # Aggregate device information
@@ -66,9 +182,48 @@ def get_devices():
             }
             devices.append(device)
         
-        return jsonify({'devices': devices, 'count': len(devices)})
+        payload = {'devices': devices, 'count': len(devices)}
+        device_cache['signature'] = signature
+        device_cache['payload'] = payload
+        return jsonify(payload)
     except Exception as e:
         return jsonify({'error': str(e), 'devices': [], 'count': 0})
+
+@app.route('/api/live_events')
+def get_live_events():
+    """Return bounded live scan events for low-latency dashboard updates."""
+    try:
+        since = float(request.args.get('since', 0) or 0)
+    except ValueError:
+        since = 0
+
+    try:
+        events = [
+            event for event in tail_jsonl(SCAN_EVENTS_PATH, MAX_LIVE_SCAN_EVENTS)
+            if float(event.get('timestamp', 0) or 0) > since
+        ]
+        latest = max((float(event.get('timestamp', 0) or 0) for event in events), default=since)
+        return jsonify({
+            'events': events,
+            'count': len(events),
+            'latest_timestamp': latest,
+            'history_limit': MAX_LIVE_SCAN_EVENTS
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'events': [], 'count': 0, 'latest_timestamp': since})
+
+@app.route('/api/scan_event', methods=['POST'])
+def post_scan_event():
+    """Accept validated controlled test scan events without crashing the backend."""
+    try:
+        event = validate_scan_event(request.get_json(silent=True))
+    except ValueError as e:
+        app.logger.warning("Rejected invalid scan event: %s", e)
+        return jsonify({'success': False, 'error': str(e)}), 422
+
+    append_scan_event(event)
+    device_cache['signature'] = None
+    return jsonify({'success': True, 'event': event})
 
 @app.route('/api/alerts')
 def get_alerts():
@@ -78,7 +233,7 @@ def get_alerts():
     
     try:
         df = pd.read_csv(ALERTS_PATH)
-        alerts = df.to_dict('records')
+        alerts = df.tail(MAX_DASHBOARD_ALERTS).to_dict('records')
         return jsonify({'alerts': alerts, 'count': len(alerts)})
     except Exception as e:
         return jsonify({'error': str(e), 'alerts': [], 'count': 0})

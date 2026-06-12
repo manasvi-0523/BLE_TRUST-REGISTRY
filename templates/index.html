@@ -221,6 +221,20 @@
             background: #d1ecf1;
             border-left-color: #17a2b8;
         }
+
+        .trust-violation-banner {
+            display: none;
+            position: sticky;
+            top: 12px;
+            z-index: 900;
+            margin-bottom: 20px;
+            padding: 16px 20px;
+            border-radius: 10px;
+            background: #b00020;
+            color: white;
+            box-shadow: 0 8px 24px rgba(176, 0, 32, 0.28);
+            font-weight: 700;
+        }
         
         .last-update {
             text-align: center;
@@ -296,6 +310,8 @@
         <button class="refresh-btn" style="background: #007bff;" onclick="startMonitor()">🔍 Start Monitor Scan</button>
         <button class="refresh-btn" style="background: #dc3545;" onclick="clearAllData()">🗑️ Clear All Data</button>
         <button class="refresh-btn" style="background: #ffc107; color: #333;" onclick="showAttackMenu()">⚠️ Inject Attack</button>
+
+        <div id="trust-violation-banner" class="trust-violation-banner" role="alert"></div>
         
         <!-- Scan Status Bar -->
         <div id="scan-status-bar" style="display: none; background: white; padding: 20px; border-radius: 15px; margin-bottom: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1);">
@@ -399,6 +415,144 @@
     </div>
     
     <script>
+        const deviceState = new Map();
+        const liveEventQueue = [];
+        let lastLiveTimestamp = 0;
+        let liveBatchScheduled = false;
+        let alertsFingerprint = '';
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[char]));
+        }
+
+        function ensureDeviceTable() {
+            const container = document.getElementById('devices-content');
+            let tbody = document.getElementById('devices-tbody');
+            if (tbody) return tbody;
+
+            container.innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>MAC Address</th>
+                            <th>Device Name</th>
+                            <th>Signal (RSSI)</th>
+                            <th>Avg Interval</th>
+                            <th>Packets</th>
+                            <th>Services</th>
+                            <th>First Seen</th>
+                            <th>Last Seen</th>
+                        </tr>
+                    </thead>
+                    <tbody id="devices-tbody"></tbody>
+                </table>
+            `;
+            return document.getElementById('devices-tbody');
+        }
+
+        function updateDeviceRow(device) {
+            const tbody = ensureDeviceTable();
+            const rowId = `device-${device.mac.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+            let row = document.getElementById(rowId);
+
+            if (!row) {
+                row = document.createElement('tr');
+                row.id = rowId;
+                row.innerHTML = `
+                    <td data-field="mac"></td>
+                    <td data-field="name"></td>
+                    <td data-field="rssi"></td>
+                    <td data-field="interval"></td>
+                    <td data-field="packets"></td>
+                    <td data-field="services"></td>
+                    <td data-field="first"></td>
+                    <td data-field="last"></td>
+                `;
+                tbody.appendChild(row);
+            }
+
+            row.querySelector('[data-field="mac"]').innerHTML = `<code>${escapeHtml(device.mac)}</code>`;
+            row.querySelector('[data-field="name"]').innerHTML = `<strong>${escapeHtml(device.name)}</strong>`;
+            row.querySelector('[data-field="rssi"]').innerHTML = `${escapeHtml(device.mean_rssi)} dBm <small>(${escapeHtml(device.min_rssi)} to ${escapeHtml(device.max_rssi)})</small>`;
+            row.querySelector('[data-field="interval"]').textContent = `${device.mean_interval} ms`;
+            row.querySelector('[data-field="packets"]').innerHTML = `<span class="badge badge-info">${escapeHtml(device.packet_count)}</span>`;
+            row.querySelector('[data-field="services"]').textContent = device.services_count;
+            row.querySelector('[data-field="first"]').textContent = device.first_seen;
+            row.querySelector('[data-field="last"]').textContent = device.last_seen;
+        }
+
+        function mergeLiveEvent(event) {
+            const mac = event.mac_address;
+            const timestampMs = Number(event.timestamp || 0) * 1000;
+            const seenTime = timestampMs ? new Date(timestampMs).toLocaleTimeString() : new Date().toLocaleTimeString();
+            const existing = deviceState.get(mac);
+
+            if (!existing) {
+                deviceState.set(mac, {
+                    mac,
+                    name: event.name || 'UNKNOWN',
+                    mean_rssi: Number(event.rssi || 0).toFixed(2),
+                    min_rssi: Number(event.rssi || 0),
+                    max_rssi: Number(event.rssi || 0),
+                    mean_interval: Number(event.interval_ms || 0).toFixed(2),
+                    packet_count: 1,
+                    services_count: Number(event.services_count || 0),
+                    first_seen: seenTime,
+                    last_seen: seenTime,
+                    rssi_total: Number(event.rssi || 0),
+                    interval_total: Number(event.interval_ms || 0)
+                });
+                return deviceState.get(mac);
+            }
+
+            const rssi = Number(event.rssi || 0);
+            const interval = Number(event.interval_ms || 0);
+            existing.packet_count += 1;
+            existing.rssi_total = (existing.rssi_total || Number(existing.mean_rssi || 0)) + rssi;
+            existing.interval_total = (existing.interval_total || Number(existing.mean_interval || 0)) + interval;
+            existing.mean_rssi = (existing.rssi_total / existing.packet_count).toFixed(2);
+            existing.min_rssi = Math.min(Number(existing.min_rssi), rssi);
+            existing.max_rssi = Math.max(Number(existing.max_rssi), rssi);
+            existing.mean_interval = (existing.interval_total / existing.packet_count).toFixed(2);
+            existing.services_count = Math.max(Number(existing.services_count || 0), Number(event.services_count || 0));
+            existing.name = event.name && event.name !== 'UNKNOWN' ? event.name : existing.name;
+            existing.last_seen = seenTime;
+            return existing;
+        }
+
+        function scheduleLiveBatch() {
+            if (liveBatchScheduled) return;
+            liveBatchScheduled = true;
+            requestAnimationFrame(() => {
+                const touched = new Map();
+                while (liveEventQueue.length) {
+                    const device = mergeLiveEvent(liveEventQueue.shift());
+                    touched.set(device.mac, device);
+                }
+                touched.forEach(updateDeviceRow);
+                liveBatchScheduled = false;
+            });
+        }
+
+        async function pollLiveEvents() {
+            try {
+                const response = await fetch(`/api/live_events?since=${lastLiveTimestamp}`);
+                const data = await response.json();
+                if (!data.events || data.events.length === 0) return;
+                liveEventQueue.push(...data.events);
+                lastLiveTimestamp = data.latest_timestamp || lastLiveTimestamp;
+                scheduleLiveBatch();
+            } catch (error) {
+                console.error('Error loading live events:', error);
+            }
+        }
+
         function refreshAll() {
             loadStats();
             loadDevices();
@@ -453,33 +607,24 @@
                     container.innerHTML = '<div class="no-data">No devices detected yet. Run baseline or monitor mode.</div>';
                     return;
                 }
-                
-                let html = '<table><thead><tr>';
-                html += '<th>MAC Address</th>';
-                html += '<th>Device Name</th>';
-                html += '<th>Signal (RSSI)</th>';
-                html += '<th>Avg Interval</th>';
-                html += '<th>Packets</th>';
-                html += '<th>Services</th>';
-                html += '<th>First Seen</th>';
-                html += '<th>Last Seen</th>';
-                html += '</tr></thead><tbody>';
-                
+
+                ensureDeviceTable();
+                const seen = new Set();
                 data.devices.forEach(device => {
-                    html += '<tr>';
-                    html += `<td><code>${device.mac}</code></td>`;
-                    html += `<td><strong>${device.name}</strong></td>`;
-                    html += `<td>${device.mean_rssi} dBm <small>(${device.min_rssi} to ${device.max_rssi})</small></td>`;
-                    html += `<td>${device.mean_interval} ms</td>`;
-                    html += `<td><span class="badge badge-info">${device.packet_count}</span></td>`;
-                    html += `<td>${device.services_count}</td>`;
-                    html += `<td>${device.first_seen}</td>`;
-                    html += `<td>${device.last_seen}</td>`;
-                    html += '</tr>';
+                    const hydrated = {
+                        ...device,
+                        rssi_total: Number(device.mean_rssi || 0) * Number(device.packet_count || 1),
+                        interval_total: Number(device.mean_interval || 0) * Number(device.packet_count || 1)
+                    };
+                    deviceState.set(device.mac, hydrated);
+                    seen.add(device.mac);
+                    updateDeviceRow(hydrated);
                 });
-                
-                html += '</tbody></table>';
-                container.innerHTML = html;
+
+                document.querySelectorAll('#devices-tbody tr').forEach(row => {
+                    const mac = row.querySelector('[data-field="mac"] code')?.textContent;
+                    if (mac && !seen.has(mac)) row.remove();
+                });
                 
             } catch (error) {
                 console.error('Error loading devices:', error);
@@ -492,12 +637,31 @@
                 const data = await response.json();
                 
                 const container = document.getElementById('alerts-content');
+                const banner = document.getElementById('trust-violation-banner');
+                banner.style.display = 'none';
                 
                 if (data.count === 0) {
                     container.innerHTML = '<div class="no-data">✅ No anomalies detected. All devices are behaving normally.</div>';
                     return;
                 }
                 
+                const latestHighRisk = [...data.alerts].reverse().find(alert =>
+                    alert.criticality === 'HIGH' || alert.criticality === 'CRITICAL'
+                );
+                if (latestHighRisk) {
+                    banner.textContent = `TRUST VIOLATION: ${latestHighRisk.criticality} risk on ${latestHighRisk.device_name || 'Unknown'} (${latestHighRisk.mac_address})`;
+                    banner.style.display = 'block';
+                }
+
+                const nextFingerprint = JSON.stringify(data.alerts.map(alert => [
+                    alert.timestamp,
+                    alert.mac_address,
+                    alert.criticality,
+                    alert.risk_score
+                ]));
+                if (nextFingerprint === alertsFingerprint) return;
+                alertsFingerprint = nextFingerprint;
+
                 let html = '';
                 data.alerts.forEach(alert => {
                     // Determine alert styling based on criticality
@@ -579,8 +743,17 @@
             }
         }
         
-        // Auto-refresh every 10 seconds (reduced from 5 to improve performance)
-        setInterval(refreshAll, 10000);
+        // Cheap real-time paths stay fast; heavier file-backed summaries refresh slower.
+        setInterval(pollLiveEvents, 500);
+        setInterval(loadAlerts, 1000);
+        setInterval(() => {
+            loadStats();
+            loadScanStatus();
+        }, 3000);
+        setInterval(() => {
+            loadDevices();
+            loadBlockchain();
+        }, 10000);
         
         // Initial load
         refreshAll();
