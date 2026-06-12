@@ -116,7 +116,7 @@ async def run_security_cycle(scanner, ai_model, blockchain, scan_duration, mode)
                     print(f"[Blockchain] Device {mac} already verified in ledger.")
     
     print("\n[Cycle Complete] Next cycle starting in 3 seconds...")
-    time.sleep(3)
+    await asyncio.sleep(3)
     return anomalies_detected
 
 async def baseline_mode(cycles=None):
