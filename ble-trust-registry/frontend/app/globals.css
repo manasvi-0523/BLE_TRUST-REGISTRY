@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: #07111f;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(20, 184, 166, 0.14), transparent 28rem),
+    radial-gradient(circle at 85% 18%, rgba(56, 189, 248, 0.12), transparent 26rem),
+    linear-gradient(145deg, #07111f 0%, #0b1220 46%, #101827 100%);
+  color: #e5eefb;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.glass {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(12, 18, 32, 0.72);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(18px);
+}
+
+.pulse-ring {
+  animation: pulse-ring 1.8s ease-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.72);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.18);
+    opacity: 0;
+  }
+}
