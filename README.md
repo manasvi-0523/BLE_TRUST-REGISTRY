@@ -239,10 +239,10 @@ Use this project only on devices and environments you own or have permission to 
 
 ## Contributors
 
-| Name | Role | Responsibilities | Contact |
-| --- | --- | --- | --- |
-| Manasvi R | Core Developer | BLE trust registry development, dashboard workflow, documentation, presentation, and design | manasvi0523@gmail.com |
-| Mithun Gowda B | Controlled Attack Developer | Controlled BLE spoofing attack setup using Kali Linux and test support | mithungowda.b7411@gmail.com |
-| Nevil Dsouza | Tester | Testing, validation, and issue reporting | nevilansondsouza@gmail.com |
-| Manas Habbu | Developer | Documentation support, presentation support, and project assistance | manaskiranhabbu@gmail.com |
-| Naren V | Developer | UI support, review, and project assistance | narenbhaskar2007@gmail.com |
+| Name | Role | Responsibilities | GitHub | Contact |
+| --- | --- | --- | --- | --- |
+| Manasvi R | Core Developer | BLE trust registry development, dashboard workflow, documentation, presentation, and design | [@manasvi-0523](https://github.com/manasvi-0523) | manasvi0523@gmail.com |
+| Mithun Gowda B | Controlled Attack Developer | Controlled BLE spoofing attack setup using Kali Linux and test support | [@mithun50](https://github.com/mithun50) | mithungowda.b7411@gmail.com |
+| Nevil Dsouza | Tester | Testing, validation, and issue reporting | [@nevil06](https://github.com/nevil06) | nevilansondsouza@gmail.com |
+| Manas Habbu | Developer | Documentation support, presentation support, and project assistance | [@Manas-H13](https://github.com/Manas-H13) | manaskiranhabbu@gmail.com |
+| Naren V | Developer | UI support, review, and project assistance | [@narenvk-29](https://github.com/narenvk-29) | narenbhaskar2007@gmail.com |
