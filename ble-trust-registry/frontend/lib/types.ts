@@ -1,19 +1,34 @@
-export type ScanSource = "realtime-scanner" | "controlled-kali-test" | "demo-backup";
+export type EventSource = "realtime-scanner" | "controlled-kali-test" | "demo-backup";
+
+export type NameSource =
+  | "advertised"
+  | "cache"
+  | "manufacturer_service"
+  | "manufacturer"
+  | "service_uuid"
+  | "address_suffix";
 
 export type BLEDeviceScan = {
+  rawName?: string | null;
+  displayName: string;
+  nameSource: NameSource;
+  manufacturerName?: string | null;
+  deviceTypeGuess?: string | null;
   deviceName: string;
   address: string;
   rssi: number;
   timestamp: string;
   serviceUuidCount: number;
+  serviceUuids: string[];
   manufacturerDataLength: number;
   advertisementFrequency: number;
   payloadLengthApprox: number;
-  source: ScanSource;
+  source: EventSource;
 };
 
 export type TrustedDeviceBaseline = {
   deviceName: string;
+  displayName: string;
   address: string;
   rssiMin: number;
   rssiMax: number;
@@ -25,12 +40,35 @@ export type TrustedDeviceBaseline = {
   payloadLengthMin: number;
   payloadLengthMax: number;
   registeredAt: string;
-  trustLabel: string;
+  trustLabel: "Trusted";
 };
 
 export type RiskLevel = "Low" | "Medium" | "High" | "Critical";
-export type Prediction = "Normal" | "Suspicious" | "Anomaly Detected" | "Trust Violation";
-export type TrustStatus = "Trusted" | "Unknown" | "Suspicious" | "Trust Violated";
+
+export type Prediction =
+  | "Observing"
+  | "Normal"
+  | "Needs Baseline"
+  | "Needs Review"
+  | "Suspicious"
+  | "Anomaly Detected"
+  | "Trust Violation";
+
+export type TrustStatus =
+  | "Trusted"
+  | "Observing"
+  | "Unregistered"
+  | "Suspicious"
+  | "Trust Violated";
+
+export type RiskResult = {
+  score: number;
+  riskLevel: RiskLevel;
+  prediction: Prediction;
+  trustStatus: TrustStatus;
+  reasons: string[];
+  recommendedAction: string;
+};
 
 export type LedgerEntry = {
   timestamp: string;
@@ -60,12 +98,19 @@ export type MonitoringState =
 
 export type ConnectionState = "Disconnected" | "Reconnecting" | "Connected";
 
-export type RiskAssessment = {
-  score: number;
-  riskLevel: RiskLevel;
-  prediction: Prediction;
-  trustStatus: TrustStatus;
-  reasons: string[];
+export type DeviceHistory = {
+  rssi: number[];
+  frequency: number[];
+  payloadLength: number[];
+  serviceUuidCount: number[];
+  timestamps: number[];
+};
+
+export type RuntimeAnalysis = {
+  histories: Record<string, DeviceHistory>;
+  seenAddressesByName: Record<string, string[]>;
+  seenNamesByAddress: Record<string, string[]>;
+  fingerprintCounts: Record<string, number>;
 };
 
 export type AuthenticityResult = {

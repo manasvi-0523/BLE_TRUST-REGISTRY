@@ -1,11 +1,11 @@
 import { sha256 } from "js-sha256";
-import type { BLEDeviceScan, LedgerEntry, RiskAssessment } from "./types";
+import type { BLEDeviceScan, LedgerEntry, RiskResult } from "./types";
 
 const GENESIS_HASH = "GENESIS";
 
 export function createLedgerEntry(
   device: BLEDeviceScan,
-  assessment: RiskAssessment,
+  assessment: RiskResult,
   previousHash: string
 ): LedgerEntry {
   const reason = assessment.reasons.join("; ");

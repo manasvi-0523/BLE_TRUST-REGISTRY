@@ -5,14 +5,28 @@ from pydantic import BaseModel, Field, field_validator
 
 
 ScanSource = Literal["realtime-scanner", "controlled-kali-test", "demo-backup"]
+NameSource = Literal[
+    "advertised",
+    "cache",
+    "manufacturer_service",
+    "manufacturer",
+    "service_uuid",
+    "address_suffix",
+]
 
 
 class BLEScanEvent(BaseModel):
+    rawName: str | None = None
+    displayName: str
+    nameSource: NameSource
+    manufacturerName: str | None = None
+    deviceTypeGuess: str | None = None
     deviceName: str = Field(default="Unknown Device")
     address: str
     rssi: float
     timestamp: datetime
     serviceUuidCount: int = Field(ge=0)
+    serviceUuids: list[str] = []
     manufacturerDataLength: int = Field(ge=0)
     advertisementFrequency: float = Field(ge=0)
     payloadLengthApprox: int = Field(ge=0)

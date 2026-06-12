@@ -1,13 +1,13 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { RiskAssessment, BLEDeviceScan } from "@/lib/types";
+import type { RiskResult, BLEDeviceScan } from "@/lib/types";
 
 export function AlertBanner({
   assessment,
   device
 }: {
-  assessment: RiskAssessment | null;
+  assessment: RiskResult | null;
   device: BLEDeviceScan | null;
 }) {
   const state =
@@ -24,10 +24,10 @@ export function AlertBanner({
       animate={{ opacity: 1, y: 0 }}
       className={
         state === "red"
-          ? "rounded-lg border border-rose-400/40 bg-rose-500/18 p-4 shadow-glow"
+          ? "rounded-xl border border-red-800 bg-red-950 p-4 text-red-100"
           : state === "yellow"
-            ? "rounded-lg border border-amber-300/40 bg-amber-400/14 p-4"
-            : "rounded-lg border border-emerald-300/30 bg-emerald-400/12 p-4"
+            ? "rounded-xl border border-amber-800 bg-amber-950 p-4 text-amber-100"
+            : "rounded-xl border border-emerald-800 bg-emerald-950 p-4 text-emerald-100"
       }
     >
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -50,10 +50,10 @@ export function AlertBanner({
         </div>
         {state === "red" && assessment && device && (
           <div className="grid gap-1 text-sm text-slate-100">
-            <span>{device.deviceName} | {device.address}</span>
+            <span>{device.displayName} | {device.address}</span>
             <span>{assessment.riskLevel} | Score {assessment.score}</span>
             <span>{assessment.reasons[0]}</span>
-            <span className="font-semibold">Action: Avoid pairing, disconnect if connected, verify manually, check ledger.</span>
+            <span className="font-semibold">Action: {assessment.recommendedAction}</span>
           </div>
         )}
       </div>
