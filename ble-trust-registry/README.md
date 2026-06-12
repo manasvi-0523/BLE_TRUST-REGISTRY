@@ -1,137 +1,45 @@
-# BLE Trust Registry
+# BLE Trust Registry - Real-Time Trust Violation Detection System
 
 ## Problem Statement
 
-BLE devices are easy to observe but hard to trust during live monitoring. A nearby device may appear normal, copy a familiar name, change advertisement behavior, or emit abnormal payload patterns. This project provides a defensive dashboard for spotting those trust violations during controlled demonstrations and real local scanning.
+BLE monitoring tools often show anonymous nearby devices without enough identity context or diagnosis evidence. This project is a defensive monitoring system that improves BLE name display, registers trusted baselines, classifies live behavior carefully, and avoids treating normal unknown devices as malicious.
 
 ## Objective
 
-Build a professional, real-time BLE security dashboard that learns trusted device behavior, compares live scan events against trusted baselines, detects anomalies, raises trust violation alerts, and records high-risk incidents in a tamper-evident local hash-chain ledger.
+Build a serious real-time BLE security monitoring product that can scan nearby BLE devices, train trusted baselines, classify devices accurately, detect controlled trust violations, and store high-risk incidents in a tamper-evident local hash-chain ledger.
 
 ## Architecture
 
-Backend:
-
 ```text
-BLE Adapter -> Python Bleak Scanner -> Feature Extraction -> FastAPI -> WebSocket / REST
+scanner-backend/
+  Bleak scanner -> name resolution -> feature extraction -> Pydantic validation -> FastAPI REST/WebSocket
+
+frontend/
+  WebSocket -> 500 ms buffer flush -> merge by address -> anomaly engine -> dense dashboard -> hash-chain ledger
 ```
 
-Frontend:
+## Backend Setup
 
-```text
-Next.js Dashboard -> Trusted Registry -> Baseline Comparison -> Deterministic Anomaly Engine -> Alert Bar -> Hash-chain Ledger
+```powershell
+cd ble-trust-registry\scanner-backend
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-The backend handles scanner control, feature extraction, validation, CORS, REST endpoints, and WebSocket broadcasting. The frontend owns registry state, baseline verification, anomaly scoring, alerting, local persistence, charts, and hash-chain logging.
+The scanner never auto-starts. Use the dashboard `Start Real-Time Monitoring` control or call:
 
-## Features
-
-- Manual real-time monitoring start/stop.
-- Backend connection status and reconnecting WebSocket client.
-- Validated controlled input through `POST /scan-event`.
-- Live BLE monitor table with trust status, risk score, prediction, and reason.
-- Trusted device registry persisted to `localStorage`.
-- Baseline training workflow with 60-second progress.
-- Authenticity check that safely handles missing baselines.
-- Deterministic AI-assisted anomaly scoring.
-- Persistent trust violation alert bar with Framer Motion transitions.
-- Local hash-chain security ledger using synchronous `js-sha256`.
-- Risk charts, RSSI chart, frequency chart, distribution chart, and lightweight threat radar.
-- Demo Backup Mode with an in-memory pre-seeded trusted baseline.
-
-## Tech Stack
-
-- Next.js
-- TypeScript
-- Tailwind CSS
-- shadcn-style local UI primitives
-- Framer Motion
-- Recharts
-- js-sha256
-- FastAPI
-- Pydantic v2
-- Bleak
-- WebSockets
-
-## How Real-Time Monitoring Works
-
-The backend does not start scanning on boot. The user clicks `Start Real-Time Monitoring`, which calls `POST /start-monitoring`. The backend starts `BleakScanner`, extracts BLE features, validates events with Pydantic, and broadcasts scan events over `/ws/scan-events`. The frontend WebSocket client reconnects every 3 seconds if disconnected and avoids duplicate event handlers by using a single lifecycle manager.
-
-## How Baseline Training Works
-
-The user starts monitoring, selects a detected device, and clicks `Train Baseline`. The dashboard collects that device behavior for 60 seconds, tracks samples, calculates RSSI/frequency/payload ranges, and lets the user save the reviewed baseline as trusted.
-
-## How Anomaly Detection Works
-
-Version 1 uses deterministic scoring so it is explainable during a demo. It is structured for a future Isolation Forest model but does not depend on a random pretrained BLE attack model.
-
-Score mapping:
-
-```text
-0-30: Low -> Normal
-31-60: Medium -> Suspicious
-61-80: High -> Anomaly Detected
-81-100: Critical -> Trust Violation
+```powershell
+curl.exe -X POST http://127.0.0.1:8000/start-monitoring
 ```
 
-Feature weights:
+## Frontend Setup
 
-- Unknown device with no baseline: +35
-- Same device name but different address: +30
-- Advertisement frequency far outside baseline: +25
-- Known address but changed behavior strongly: +25
-- Service UUID count mismatch: +15
-- Payload length outside trusted range: +15
-- RSSI outside trusted range: +10
-- Manufacturer data length abnormality: +10
-- Repeated abnormal behavior: +10
-
-The final score is clamped once after all feature scores are summed.
-
-## How Hash-chain Logging Works
-
-High-risk and critical events are appended to a local ledger. Each entry stores device details, risk labels, trust status, reason, previous hash, and current hash.
-
-Hash input:
-
-```text
-[
-  timestamp,
-  deviceName,
-  address,
-  riskScore,
-  riskLevel,
-  prediction,
-  trustStatus,
-  reason,
-  previousHash
-].join("|")
-```
-
-The frontend uses synchronous `js-sha256`, not Web Crypto, so append-and-verify stays simple and deterministic.
-
-## How localStorage Persistence Works
-
-The frontend stores JSON arrays under:
-
-```text
-ble_trusted_devices
-ble_baselines
-ble_ledger_entries
-```
-
-Storage parsing is defensive. If corrupted JSON is found, the UI does not crash; the bad key is reset to an empty array and a warning is shown.
-
-## Ethical Scope
-
-This project does not perform unauthorized BLE exploitation or real data theft. The Kali-side activity is represented only as controlled spoofing/anomaly generation using owned or test devices. The dashboard focuses on defensive detection, alerting, authenticity verification, and tamper-evident logging.
-
-## How To Run Frontend
-
-```bash
-cd ble-trust-registry/frontend
-npm install
-npm run dev
+```powershell
+cd ble-trust-registry\frontend
+npm.cmd install
+npm.cmd run dev
 ```
 
 Open:
@@ -140,35 +48,106 @@ Open:
 http://localhost:3000
 ```
 
-## How To Run Scanner Backend
+## Real-Time Monitoring Flow
 
-```bash
-cd ble-trust-registry/scanner-backend
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --reload --host 127.0.0.1 --port 8000
+1. Start the FastAPI backend.
+2. Start the Next.js frontend.
+3. Open the dashboard.
+4. Click `Start Real-Time Monitoring`.
+5. BLE events stream through `/ws/scan-events`.
+6. The frontend buffers events in a ref and flushes them to React state every 500 ms.
+7. Device rows are merged by address so the table stays stable and readable.
+
+## Device Name Resolution Flow
+
+The backend does not rely only on `device.name`. It resolves display names using:
+
+- Advertised local name
+- Cached name by address
+- OUI manufacturer lookup through `netaddr`
+- Service UUID type guess
+- Address suffix fallback
+
+Manufacturer and service guesses are display aids only. Trust requires a registered baseline and matching behavior.
+
+## Baseline Training Flow
+
+Select a live device, click `Train Baseline`, observe samples for 60 seconds, then save the baseline. The saved baseline includes RSSI range, average RSSI, advertisement frequency range, service UUID count, payload range, and registration timestamp.
+
+## Anomaly Detection Logic
+
+The anomaly engine uses:
+
+- Warmup gate for new devices
+- Per-device rolling history
+- Z-score deviation
+- Temporal burst detection
+- Inter-arrival irregularity
+- Fingerprint consistency
+- Identity collision checks
+- Baseline-aware comparison when a baseline exists
+
+Normal unknown devices are not suspicious by default.
+
+## Unknown-Device Safe Logic
+
+```text
+Unknown + fewer than 5 observations -> Observing / Low
+Unknown + warmed up + normal behavior -> Unregistered / Needs Baseline / Low
+Known trusted + baseline match -> Trusted / Normal / Low
+Known trusted + strong deviation -> Anomaly Detected or Trust Violation
 ```
 
-## How To Test Controlled Input
+No red alert or ledger entry is created for normal unknown devices.
 
-```bash
-curl -X POST http://127.0.0.1:8000/scan-event ^
-  -H "Content-Type: application/json" ^
-  -d "{\"deviceName\":\"AirPods 280 ANC\",\"address\":\"FA:KE:AA:11:22:33\",\"rssi\":-31,\"advertisementFrequency\":48.0,\"serviceUuidCount\":7,\"manufacturerDataLength\":40,\"payloadLengthApprox\":80,\"timestamp\":\"2026-06-12T10:00:00Z\",\"source\":\"controlled-kali-test\"}"
+## WebSocket Latency Strategy
+
+The backend broadcasts one validated BLE event immediately as one WebSocket message. The frontend avoids re-rendering on every message by buffering incoming events and flushing every 500 ms.
+
+## UI Design Principles
+
+The UI uses a dense Elastic SIEM/Grafana-style layout:
+
+- Solid alert banner
+- Solid readable live BLE table
+- Subtle glassmorphism only for secondary side panels
+- Functional colors only
+- Monospace addresses and hashes
+- No radar visuals, decorative charts, pulse animations, or cyberpunk effects
+
+Use restrained glassmorphism only for secondary dashboard panels: subtle transparent dark cards, thin slate borders, low blur, and high text contrast. Do not apply glassmorphism to the live BLE table or alert banner because those require maximum readability. The UI should feel like Elastic SIEM/Grafana with subtle glass panels, not a futuristic neon dashboard.
+
+## Hash-chain Ledger Logic
+
+High and Critical incidents are appended to a local ledger. Each hash is built with field separators:
+
+```text
+timestamp|deviceName|address|riskScore|riskLevel|prediction|trustStatus|reason|previousHash
 ```
 
-Generate timestamps dynamically in real test scripts.
+The frontend uses synchronous `js-sha256`.
+
+## Ethical Scope
+
+This project does not perform unauthorized BLE exploitation, real data theft, credential capture, malicious BLE payloads, device compromise, or offensive automation. Controlled testing must use owned/test devices only.
+
+## Controlled Test Flow
+
+Controlled test events can be sent to:
+
+```text
+POST /scan-event
+```
+
+Invalid payloads return `422` and do not crash the backend.
 
 ## Future Enhancements
 
-- Isolation Forest trained on real baseline data
-- Stronger BLE fingerprinting
-- Browser push notifications
-- Mobile companion alert app
+- Isolation Forest trained on baseline data
+- Browser notifications
+- Mobile companion app
 - Cloud log sync
-- Full blockchain smart contract registry
-- Exportable PDF incident reports
-- Support for multiple BLE adapters
-- Better device identity resolution
-- Extended controlled Kali test integration
+- Full blockchain registry
+- Exportable incident reports
+- Multiple BLE adapters
+- Optional analytics tab

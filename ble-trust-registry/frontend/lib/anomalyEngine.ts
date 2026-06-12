@@ -1,24 +1,29 @@
+import { capContribution, getZScore } from "./behaviorProfile";
+import { isMeaningfulName, scoreFingerprintConsistency } from "./fingerprintTracker";
+import { scoreInterArrivalIrregularity, scoreTemporalBurst } from "./temporalAnalyzer";
 import type {
   AuthenticityResult,
   BLEDeviceScan,
   Prediction,
-  RiskAssessment,
   RiskLevel,
+  RiskResult,
+  RuntimeAnalysis,
   TrustedDeviceBaseline,
   TrustStatus
 } from "./types";
 
-export function classifyRisk(score: number): Pick<RiskAssessment, "riskLevel" | "prediction"> {
-  if (score <= 30) return { riskLevel: "Low", prediction: "Normal" };
-  if (score <= 60) return { riskLevel: "Medium", prediction: "Suspicious" };
-  if (score <= 80) return { riskLevel: "High", prediction: "Anomaly Detected" };
-  return { riskLevel: "Critical", prediction: "Trust Violation" };
+export function classifyRisk(score: number): RiskLevel {
+  if (score <= 30) return "Low";
+  if (score <= 60) return "Medium";
+  if (score <= 80) return "High";
+  return "Critical";
 }
 
 export function detectNameAddressMismatch(device: BLEDeviceScan, baselines: TrustedDeviceBaseline[]) {
+  if (!isMeaningfulName(device.displayName)) return false;
   return baselines.some(
     (baseline) =>
-      baseline.deviceName.toLowerCase() === device.deviceName.toLowerCase() &&
+      baseline.displayName.toLowerCase() === device.displayName.toLowerCase() &&
       baseline.address.toLowerCase() !== device.address.toLowerCase()
   );
 }
@@ -30,23 +35,28 @@ export function verifyAuthenticity(
   if (!baselineOrNull) {
     return {
       status: "No Baseline - Cannot Verify",
-      reason: "This device has no registered trusted baseline.",
-      checks: [
-        {
-          label: "Baseline",
-          registered: "None",
-          live: device.address,
-          result: "Skipped"
-        }
-      ]
+      reason: "Register this device to perform authenticity verification.",
+      checks: [{ label: "Baseline", registered: "None", live: device.address, result: "Skipped" }]
     };
   }
 
   const checks = [
     {
-      label: "Registered Frequency",
-      registered: `${baselineOrNull.frequencyMin}-${baselineOrNull.frequencyMax} ads/sec`,
-      live: `${device.advertisementFrequency.toFixed(1)} ads/sec`,
+      label: "Address",
+      registered: baselineOrNull.address,
+      live: device.address,
+      result: baselineOrNull.address.toLowerCase() === device.address.toLowerCase() ? "Passed" : "Failed"
+    },
+    {
+      label: "RSSI range",
+      registered: `${baselineOrNull.rssiMin}-${baselineOrNull.rssiMax}`,
+      live: `${device.rssi}`,
+      result: device.rssi >= baselineOrNull.rssiMin && device.rssi <= baselineOrNull.rssiMax ? "Passed" : "Failed"
+    },
+    {
+      label: "Frequency range",
+      registered: `${baselineOrNull.frequencyMin}-${baselineOrNull.frequencyMax}`,
+      live: `${device.advertisementFrequency.toFixed(1)}`,
       result:
         device.advertisementFrequency >= baselineOrNull.frequencyMin &&
         device.advertisementFrequency <= baselineOrNull.frequencyMax
@@ -54,13 +64,13 @@ export function verifyAuthenticity(
           : "Failed"
     },
     {
-      label: "Registered Service Count",
+      label: "Service UUID count",
       registered: String(baselineOrNull.serviceUuidCount),
       live: String(device.serviceUuidCount),
       result: device.serviceUuidCount === baselineOrNull.serviceUuidCount ? "Passed" : "Failed"
     },
     {
-      label: "Registered Payload Length",
+      label: "Payload range",
       registered: `${baselineOrNull.payloadLengthMin}-${baselineOrNull.payloadLengthMax}`,
       live: String(device.payloadLengthApprox),
       result:
@@ -68,126 +78,165 @@ export function verifyAuthenticity(
         device.payloadLengthApprox <= baselineOrNull.payloadLengthMax
           ? "Passed"
           : "Failed"
-    },
-    {
-      label: "Registered RSSI",
-      registered: `${baselineOrNull.rssiMin}-${baselineOrNull.rssiMax} dBm`,
-      live: `${device.rssi} dBm`,
-      result: device.rssi >= baselineOrNull.rssiMin && device.rssi <= baselineOrNull.rssiMax ? "Passed" : "Failed"
     }
   ] as AuthenticityResult["checks"];
 
   const failed = checks.filter((check) => check.result === "Failed");
   return {
     status: failed.length ? "Failed" : "Passed",
-    reason: failed.length
-      ? `${failed.map((check) => check.label.replace("Registered ", "").toLowerCase()).join(", ")} failed trusted baseline checks.`
-      : "Live behavior matches the registered trusted baseline.",
+    reason: failed.length ? "One or more live fields deviate from the trusted baseline." : "Live behavior matches the trusted baseline.",
     checks
   };
-}
-
-export function explainAnomaly(
-  device: BLEDeviceScan,
-  baselineOrNull: TrustedDeviceBaseline | null,
-  allBaselines: TrustedDeviceBaseline[]
-) {
-  return calculateRiskScore(device, baselineOrNull, allBaselines).reasons;
 }
 
 export function calculateRiskScore(
   device: BLEDeviceScan,
   baselineOrNull: TrustedDeviceBaseline | null,
   allBaselines: TrustedDeviceBaseline[],
-  recentCounts: Record<string, number> = {}
-): RiskAssessment {
-  let score = baselineOrNull ? 0 : 35;
+  runtime: RuntimeAnalysis
+): RiskResult {
+  const history = runtime.histories[device.address] || {
+    rssi: [],
+    frequency: [],
+    payloadLength: [],
+    serviceUuidCount: [],
+    timestamps: []
+  };
+  const observationCount = Math.max(history.timestamps.length, 1);
+  const warmedUp = observationCount >= 5;
   const reasons: string[] = [];
+  let score = baselineOrNull ? 0 : warmedUp ? 10 : Math.min(10, observationCount * 2);
 
-  if (!baselineOrNull) {
-    reasons.push("Device has no trusted baseline.");
+  if (!baselineOrNull && !warmedUp) {
+    return {
+      score,
+      riskLevel: "Low",
+      prediction: "Observing",
+      trustStatus: "Observing",
+      reasons: ["Collecting initial behavior before classification."],
+      recommendedAction: "Continue observing. Register baseline if this is your device."
+    };
+  }
+
+  const burst = scoreTemporalBurst(history.timestamps);
+  const timing = scoreInterArrivalIrregularity(history.timestamps);
+  const fingerprint = scoreFingerprintConsistency(runtime.fingerprintCounts[device.address] || 1);
+  for (const evidence of [burst, timing, fingerprint]) {
+    if (evidence.score) {
+      score += evidence.score;
+      reasons.push(evidence.reason);
+    }
   }
 
   if (detectNameAddressMismatch(device, allBaselines)) {
     score += 30;
-    reasons.push("Device name matches a trusted device but address differs.");
+    reasons.push("Same trusted name appeared from a different address.");
+  }
+
+  const namesForAddress = runtime.seenNamesByAddress[device.address] || [];
+  if (namesForAddress.filter(isMeaningfulName).length > 1) {
+    score += 25;
+    reasons.push("Same address is broadcasting multiple meaningful names.");
   }
 
   if (baselineOrNull) {
-    const frequencyOutside =
-      device.advertisementFrequency < baselineOrNull.frequencyMin ||
-      device.advertisementFrequency > baselineOrNull.frequencyMax;
-    const frequencyFarOutside =
-      device.advertisementFrequency > baselineOrNull.frequencyMax * 2 ||
-      device.advertisementFrequency < baselineOrNull.frequencyMin / 2;
-    if (frequencyFarOutside || frequencyOutside) {
-      score += 25;
-      reasons.push(
-        `Advertisement frequency is ${device.advertisementFrequency.toFixed(1)} ads/sec, expected ${baselineOrNull.frequencyMin}-${baselineOrNull.frequencyMax}.`
-      );
+    let frequencyScore = 0;
+    const frequencyZ = getZScore(history.frequency, device.advertisementFrequency);
+    if (frequencyZ > 3.5) {
+      frequencyScore += 30;
+      reasons.push(`Frequency deviation z-score: ${frequencyZ.toFixed(1)}.`);
+    } else if (frequencyZ > 2.0) {
+      frequencyScore += 15;
+      reasons.push(`Frequency variation is unusual (z-score ${frequencyZ.toFixed(1)}).`);
     }
-
-    if (device.serviceUuidCount !== baselineOrNull.serviceUuidCount) {
-      score += 15;
-      reasons.push(`Service UUID count changed from ${baselineOrNull.serviceUuidCount} to ${device.serviceUuidCount}.`);
+    if (device.advertisementFrequency < baselineOrNull.frequencyMin || device.advertisementFrequency > baselineOrNull.frequencyMax) {
+      frequencyScore += 15;
+      reasons.push("Advertisement frequency is outside the saved baseline range.");
     }
+    score += capContribution(frequencyScore, 35);
 
-    if (
-      device.payloadLengthApprox < baselineOrNull.payloadLengthMin ||
-      device.payloadLengthApprox > baselineOrNull.payloadLengthMax
-    ) {
-      score += 15;
-      reasons.push("Payload length exceeded trusted baseline.");
+    let rssiScore = 0;
+    const rssiZ = getZScore(history.rssi, device.rssi);
+    if (rssiZ > 3.5) {
+      rssiScore += 15;
+      reasons.push(`RSSI deviation z-score: ${rssiZ.toFixed(1)}.`);
     }
-
     if (device.rssi < baselineOrNull.rssiMin || device.rssi > baselineOrNull.rssiMax) {
-      score += 10;
-      reasons.push(`RSSI ${device.rssi} dBm is outside trusted range ${baselineOrNull.rssiMin}-${baselineOrNull.rssiMax}.`);
+      rssiScore += 10;
+      reasons.push("RSSI is outside the trusted baseline range.");
     }
+    score += capContribution(rssiScore, 20);
 
-    if (device.manufacturerDataLength > baselineOrNull.payloadLengthMax * 2) {
-      score += 10;
-      reasons.push("Manufacturer data length is abnormal for this trusted device.");
+    let payloadScore = 0;
+    const payloadZ = getZScore(history.payloadLength, device.payloadLengthApprox);
+    if (payloadZ > 3.0) {
+      payloadScore += 15;
+      reasons.push(`Payload length deviation z-score: ${payloadZ.toFixed(1)}.`);
     }
+    if (device.payloadLengthApprox < baselineOrNull.payloadLengthMin || device.payloadLengthApprox > baselineOrNull.payloadLengthMax) {
+      payloadScore += 15;
+      reasons.push("Payload length is outside the trusted baseline range.");
+    }
+    score += capContribution(payloadScore, 25);
 
-    if (score >= 25) {
+    let serviceScore = 0;
+    const serviceZ = getZScore(history.serviceUuidCount, device.serviceUuidCount);
+    if (serviceZ > 2.0) {
+      serviceScore += 20;
+      reasons.push(`Service UUID count deviation z-score: ${serviceZ.toFixed(1)}.`);
+    }
+    if (device.serviceUuidCount !== baselineOrNull.serviceUuidCount) {
+      serviceScore += 15;
+      reasons.push("Service UUID count differs from the trusted baseline.");
+    }
+    score += capContribution(serviceScore, 25);
+  } else {
+    reasons.push("No trusted baseline exists. No abnormal BLE behavior detected.");
+    if (device.source === "controlled-kali-test") {
       score += 25;
-      reasons.push("Known address has changed behavior strongly.");
+      reasons.push("Controlled test source reported this event for review.");
     }
-  } else if (device.advertisementFrequency >= 20 || device.payloadLengthApprox >= 70 || device.serviceUuidCount >= 7) {
-    score += 25;
-    reasons.push("Unknown device also shows extreme frequency, payload, or service count.");
-  }
-
-  if ((recentCounts[device.address] || 0) >= 4) {
-    score += 10;
-    reasons.push("Same abnormal device was seen repeatedly within a short window.");
+    if (device.advertisementFrequency > 50 || device.payloadLengthApprox > 200) {
+      score += 25;
+      reasons.push("Extreme broad sanity check exceeded normal BLE observation bounds.");
+    }
   }
 
   const finalScore = Math.max(0, Math.min(100, score));
-  const labels = classifyRisk(finalScore);
-  const trustStatus = deriveTrustStatus(finalScore, baselineOrNull, labels.prediction);
-
-  if (!reasons.length) {
-    reasons.push("Live behavior matches the trusted baseline.");
-  }
+  const riskLevel = classifyRisk(finalScore);
+  const prediction = getPrediction(riskLevel, Boolean(baselineOrNull), warmedUp);
+  const trustStatus = getTrustStatus(riskLevel, Boolean(baselineOrNull), warmedUp);
 
   return {
     score: finalScore,
-    riskLevel: labels.riskLevel,
-    prediction: labels.prediction,
+    riskLevel,
+    prediction,
     trustStatus,
-    reasons
+    reasons,
+    recommendedAction: getRecommendedAction(trustStatus)
   };
 }
 
-function deriveTrustStatus(
-  score: number,
-  baselineOrNull: TrustedDeviceBaseline | null,
-  prediction: Prediction
-): TrustStatus {
-  if (prediction === "Trust Violation") return "Trust Violated";
-  if (score > 60) return "Suspicious";
-  if (!baselineOrNull) return "Unknown";
-  return "Trusted";
+function getPrediction(riskLevel: RiskLevel, hasBaseline: boolean, warmedUp: boolean): Prediction {
+  if (riskLevel === "Critical") return "Trust Violation";
+  if (riskLevel === "High") return "Anomaly Detected";
+  if (riskLevel === "Medium") return "Needs Review";
+  if (!hasBaseline && !warmedUp) return "Observing";
+  if (!hasBaseline) return "Needs Baseline";
+  return "Normal";
+}
+
+function getTrustStatus(riskLevel: RiskLevel, hasBaseline: boolean, warmedUp: boolean): TrustStatus {
+  if (riskLevel === "Critical") return "Trust Violated";
+  if (riskLevel === "High" || riskLevel === "Medium") return "Suspicious";
+  if (hasBaseline) return "Trusted";
+  if (!warmedUp) return "Observing";
+  return "Unregistered";
+}
+
+function getRecommendedAction(trustStatus: TrustStatus) {
+  if (trustStatus === "Trust Violated") return "Avoid pairing, disconnect if connected, and inspect the ledger.";
+  if (trustStatus === "Suspicious") return "Continue monitoring and verify the device manually.";
+  if (trustStatus === "Unregistered" || trustStatus === "Observing") return "Register a baseline if this is your device.";
+  return "No action required.";
 }

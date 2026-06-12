@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Awaitable, Callable
 
 from models import BLEScanEvent
+from name_resolver import get_best_display_name, get_manufacturer, guess_device_type
 
 try:
     from bleak import BleakScanner
@@ -23,6 +24,14 @@ class BLEScannerService:
         self._scanner = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._sightings: dict[str, deque[datetime]] = defaultdict(lambda: deque(maxlen=500))
+
+    async def discover_devices(self, timeout: float = 10.0):
+        if BleakScanner is None:
+            return []
+        try:
+            return await BleakScanner.discover(timeout=timeout, scanning_mode="active")
+        except Exception:
+            return await BleakScanner.discover(timeout=timeout)
 
     async def start(self):
         if self.running:
@@ -54,20 +63,29 @@ class BLEScannerService:
         now = datetime.now(timezone.utc)
         address = getattr(device, "address", "") or "UNKNOWN"
         service_uuids = getattr(advertisement_data, "service_uuids", None) or []
+        advertised_name = (
+            getattr(advertisement_data, "local_name", None)
+            or getattr(device, "name", None)
+        )
+        display_name, name_source = get_best_display_name(address, advertised_name, service_uuids)
+        manufacturer_name = get_manufacturer(address)
+        device_type_guess = guess_device_type(service_uuids)
         manufacturer_data = getattr(advertisement_data, "manufacturer_data", None) or {}
         manufacturer_length = sum(len(bytes(value)) for value in manufacturer_data.values())
         payload_length = manufacturer_length + sum(len(str(uuid)) for uuid in service_uuids)
 
         event = BLEScanEvent(
-            deviceName=(
-                getattr(advertisement_data, "local_name", None)
-                or getattr(device, "name", None)
-                or "Unknown Device"
-            ),
+            rawName=advertised_name,
+            displayName=display_name,
+            nameSource=name_source,
+            manufacturerName=manufacturer_name,
+            deviceTypeGuess=device_type_guess,
+            deviceName=display_name,
             address=address,
             rssi=float(getattr(advertisement_data, "rssi", 0.0)),
             timestamp=now,
             serviceUuidCount=len(service_uuids),
+            serviceUuids=service_uuids,
             manufacturerDataLength=manufacturer_length,
             advertisementFrequency=self._frequency_for(address, now),
             payloadLengthApprox=payload_length,

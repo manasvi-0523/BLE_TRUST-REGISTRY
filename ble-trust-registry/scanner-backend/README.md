@@ -22,5 +22,5 @@ curl -X POST http://127.0.0.1:8000/start-monitoring
 ```bash
 curl -X POST http://127.0.0.1:8000/scan-event ^
   -H "Content-Type: application/json" ^
-  -d "{\"deviceName\":\"AirPods 280 ANC\",\"address\":\"FA:KE:AA:11:22:33\",\"rssi\":-31,\"advertisementFrequency\":48.0,\"serviceUuidCount\":7,\"manufacturerDataLength\":40,\"payloadLengthApprox\":80,\"timestamp\":\"2026-06-12T10:00:00Z\",\"source\":\"controlled-kali-test\"}"
+  -d "{\"rawName\":\"AirPods 280 ANC\",\"displayName\":\"AirPods 280 ANC\",\"nameSource\":\"advertised\",\"manufacturerName\":null,\"deviceTypeGuess\":null,\"deviceName\":\"AirPods 280 ANC\",\"address\":\"FA:KE:AA:11:22:33\",\"rssi\":-31,\"advertisementFrequency\":48.0,\"serviceUuidCount\":7,\"serviceUuids\":[],\"manufacturerDataLength\":40,\"payloadLengthApprox\":80,\"timestamp\":\"2026-06-12T10:00:00Z\",\"source\":\"controlled-kali-test\"}"
 ```
