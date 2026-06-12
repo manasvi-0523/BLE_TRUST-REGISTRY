@@ -33,6 +33,10 @@ const WS = process.env.NEXT_PUBLIC_SCANNER_WS || "ws://127.0.0.1:8000/ws/scan-ev
 const MAX_DEBUG_EVENTS = 300;
 
 type DeviceRow = BLEDeviceScan & RiskResult & { observations: number };
+type IncomingScanEvent = Partial<BLEDeviceScan> & {
+  name?: string | null;
+  localName?: string | null;
+};
 
 export default function DashboardPage() {
   const [connection, setConnection] = useState<ConnectionState>("Disconnected");
@@ -436,13 +440,26 @@ const DeviceTableRow = memo(function DeviceTableRow({
   );
 });
 
-function normalizeEvent(event: BLEDeviceScan): BLEDeviceScan {
+function normalizeEvent(event: IncomingScanEvent): BLEDeviceScan {
+  const address = String(event.address || "unknown-address").trim() || "unknown-address";
+  const fallbackName = `BLE Device (${address.slice(-5)})`;
+  const displayName = String(event.displayName || event.deviceName || event.name || event.localName || fallbackName).trim();
+  const deviceName = String(event.deviceName || event.displayName || event.name || event.localName || displayName || fallbackName).trim();
   return {
-    ...event,
-    displayName: event.displayName || event.deviceName || `BLE Device (${event.address.slice(-5)})`,
-    deviceName: event.deviceName || event.displayName || `BLE Device (${event.address.slice(-5)})`,
+    rawName: event.rawName ?? null,
+    displayName: displayName || fallbackName,
+    manufacturerName: event.manufacturerName ?? null,
+    deviceTypeGuess: event.deviceTypeGuess ?? null,
+    deviceName: deviceName || fallbackName,
+    address,
+    rssi: Number(event.rssi ?? -100),
+    advertisementFrequency: Number(event.advertisementFrequency ?? 0),
+    manufacturerDataLength: Number(event.manufacturerDataLength ?? 0),
+    payloadLengthApprox: Number(event.payloadLengthApprox ?? 0),
+    serviceUuidCount: Number(event.serviceUuidCount ?? event.serviceUuids?.length ?? 0),
     nameSource: event.nameSource || "address_suffix",
     serviceUuids: event.serviceUuids || [],
+    source: event.source || "realtime-scanner",
     timestamp: event.timestamp || new Date().toISOString()
   };
 }

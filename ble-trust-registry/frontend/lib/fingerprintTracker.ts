@@ -16,7 +16,8 @@ export function scoreFingerprintConsistency(uniqueCount: number) {
   return { score: 0, reason: "" };
 }
 
-export function isMeaningfulName(name: string) {
+export function isMeaningfulName(name?: string | null) {
+  if (!name) return false;
   const generic = [
     "unknown device",
     "name unavailable",
