@@ -20,11 +20,15 @@ export function classifyRisk(score: number): RiskLevel {
 }
 
 export function detectNameAddressMismatch(device: BLEDeviceScan, baselines: TrustedDeviceBaseline[]) {
-  if (!isMeaningfulName(device.displayName)) return false;
+  const deviceName = safeLower(device.displayName);
+  const deviceAddress = safeLower(device.address);
+  if (!isMeaningfulName(deviceName) || !deviceAddress) return false;
   return baselines.some(
-    (baseline) =>
-      baseline.displayName.toLowerCase() === device.displayName.toLowerCase() &&
-      baseline.address.toLowerCase() !== device.address.toLowerCase()
+    (baseline) => {
+      const baselineName = safeLower(baseline.displayName || baseline.deviceName);
+      const baselineAddress = safeLower(baseline.address);
+      return baselineName === deviceName && baselineAddress !== deviceAddress;
+    }
   );
 }
 
@@ -87,6 +91,10 @@ export function verifyAuthenticity(
     reason: failed.length ? "One or more live fields deviate from the trusted baseline." : "Live behavior matches the trusted baseline.",
     checks
   };
+}
+
+function safeLower(value?: string | null) {
+  return String(value || "").trim().toLowerCase();
 }
 
 export function calculateRiskScore(
