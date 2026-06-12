@@ -155,7 +155,7 @@ export function calculateRiskScore(
       reasons.push("Known address has changed behavior strongly.");
     }
   } else if (device.advertisementFrequency >= 20 || device.payloadLengthApprox >= 70 || device.serviceUuidCount >= 7) {
-    score += 25;
+    score += 50;
     reasons.push("Unknown device also shows extreme frequency, payload, or service count.");
   }
 

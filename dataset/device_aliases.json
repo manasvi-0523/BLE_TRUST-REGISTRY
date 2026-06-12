@@ -1,9 +1,0 @@
-{
-  "_comment": "Trusted Device Registry - Map MAC addresses to friendly names",
-  "_usage": "Add known devices here to override UNKNOWN names",
-  "_example": "AA:BB:CC:DD:EE:FF: 'Manasvi Phone'",
-  
-  "10:7B:EF:72:98:90": "JioSTB Living Room TV",
-  "6C:EB:C6:8C:87:10": "Samsung Galaxy S21",
-  "18:76:36:72:98:90": "Living Room TV"
-}

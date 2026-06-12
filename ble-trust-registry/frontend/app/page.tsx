@@ -131,10 +131,11 @@ export default function DashboardPage() {
     : null;
 
   const ingestEvent = useCallback(
-    (event: BLEDeviceScan) => {
+    (event: BLEDeviceScan, baselineOverride?: TrustedDeviceBaseline[]) => {
+      const activeBaselines = baselineOverride || trustedDevices;
       setEvents((current) => [...current, event].slice(-MAX_EVENTS));
-      const baseline = trustedDevices.find((item) => item.address.toLowerCase() === event.address.toLowerCase()) || null;
-      const assessment = calculateRiskScore(event, baseline, trustedDevices, recentCounts);
+      const baseline = activeBaselines.find((item) => item.address.toLowerCase() === event.address.toLowerCase()) || null;
+      const assessment = calculateRiskScore(event, baseline, activeBaselines, recentCounts);
       if (assessment.riskLevel === "High" || assessment.riskLevel === "Critical") {
         setMonitoringState(assessment.riskLevel === "Critical" ? "TRUST_VIOLATION_DETECTED" : "SUSPICIOUS_ACTIVITY");
         if (autoLog) {
@@ -217,12 +218,13 @@ export default function DashboardPage() {
   function runDemoBackup() {
     const demoBaseline = createDemoBaseline();
     setDemoMode(true);
-    setTrustedDevices((current) => {
-      const withoutDuplicate = current.filter((device) => device.address !== demoBaseline.address);
-      return [...withoutDuplicate, demoBaseline];
-    });
+    const nextTrustedDevices = [
+      ...trustedDevices.filter((device) => device.address !== demoBaseline.address),
+      demoBaseline
+    ];
+    setTrustedDevices(nextTrustedDevices);
     createDemoEvents().forEach((event, index) => {
-      window.setTimeout(() => ingestEvent(event), index * 650);
+      window.setTimeout(() => ingestEvent(event, nextTrustedDevices), index * 650);
     });
   }
 
