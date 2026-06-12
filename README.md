@@ -111,28 +111,26 @@ High and Critical events are treated differently from ordinary scan noise. They 
 ```text
 BLE_TRUST-REGISTRY/
   README.md
-  ble-trust-registry/
-    README.md
-    docs/
-      architecture.md
-      installation.md
-      troubleshooting.md
-      workflow.md
-    frontend/
-      app/
-      components/
-      lib/
-      package.json
-    scanner-backend/
-      main.py
-      models.py
-      name_resolver.py
-      scanner.py
-      requirements.txt
-    scripts/
-      start-dev.cmd
-      start-backend.cmd
-      start-frontend.cmd
+  docs/
+    architecture.md
+    installation.md
+    troubleshooting.md
+    workflow.md
+  frontend/
+    app/
+    components/
+    lib/
+    package.json
+  scanner-backend/
+    main.py
+    models.py
+    name_resolver.py
+    scanner.py
+    requirements.txt
+  scripts/
+    start-dev.cmd
+    start-backend.cmd
+    start-frontend.cmd
 ```
 
 ## Installation
@@ -148,7 +146,7 @@ Clone and enter the app:
 
 ```powershell
 git clone https://github.com/manasvi-0523/BLE_TRUST-REGISTRY.git
-cd BLE_TRUST-REGISTRY\ble-trust-registry
+cd BLE_TRUST-REGISTRY
 ```
 
 Install backend dependencies:
@@ -172,7 +170,7 @@ npm.cmd install
 From the application root:
 
 ```powershell
-cd BLE_TRUST-REGISTRY\ble-trust-registry
+cd BLE_TRUST-REGISTRY
 .\scripts\start-dev.cmd
 ```
 
@@ -193,14 +191,14 @@ http://127.0.0.1:8000/status
 Backend:
 
 ```powershell
-cd BLE_TRUST-REGISTRY\ble-trust-registry\scanner-backend
+cd BLE_TRUST-REGISTRY\scanner-backend
 python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
 Frontend:
 
 ```powershell
-cd BLE_TRUST-REGISTRY\ble-trust-registry\frontend
+cd BLE_TRUST-REGISTRY\frontend
 npm.cmd run dev
 ```
 
@@ -228,10 +226,10 @@ WS   /ws/scan-events
 ## Documentation
 
 ```text
-ble-trust-registry/docs/architecture.md
-ble-trust-registry/docs/workflow.md
-ble-trust-registry/docs/installation.md
-ble-trust-registry/docs/troubleshooting.md
+docs/architecture.md
+docs/workflow.md
+docs/installation.md
+docs/troubleshooting.md
 ```
 
 ## Ethical Scope

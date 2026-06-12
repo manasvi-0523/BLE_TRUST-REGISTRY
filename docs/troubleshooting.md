@@ -5,7 +5,7 @@
 Start the backend:
 
 ```powershell
-cd ble-trust-registry\scanner-backend
+cd BLE_TRUST-REGISTRY\scanner-backend
 python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -76,4 +76,3 @@ Minimum required shape:
   "source": "controlled-kali-test"
 }
 ```
-

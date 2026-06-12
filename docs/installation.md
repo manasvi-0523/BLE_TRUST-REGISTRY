@@ -14,7 +14,7 @@ This guide starts from a fresh clone and brings up the live BLE Trust Registry s
 
 ```powershell
 git clone https://github.com/manasvi-0523/BLE_TRUST-REGISTRY.git
-cd BLE_TRUST-REGISTRY\ble-trust-registry
+cd BLE_TRUST-REGISTRY
 ```
 
 ## Backend Setup
@@ -43,7 +43,7 @@ http://127.0.0.1:8000/status
 Open a second terminal:
 
 ```powershell
-cd BLE_TRUST-REGISTRY\ble-trust-registry\frontend
+cd BLE_TRUST-REGISTRY\frontend
 npm.cmd install
 npm.cmd run dev
 ```
@@ -59,7 +59,7 @@ http://localhost:3000
 After dependencies are installed:
 
 ```powershell
-cd BLE_TRUST-REGISTRY\ble-trust-registry
+cd BLE_TRUST-REGISTRY
 .\scripts\start-dev.cmd
 ```
 
