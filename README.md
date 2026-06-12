@@ -96,42 +96,21 @@ flowchart LR
     N --> P
 ```
 
-## How The Pieces Work
+## Pipeline Workflow
 
-The backend scanner observes BLE advertisements asynchronously. Each event is enriched with name resolution, signal strength, service UUID counts, payload size, manufacturer data length, and advertisement frequency. Invalid payloads are rejected before they reach the dashboard.
+The system pipeline begins at the BLE radio layer. Nearby BLE devices continuously emit advertisement packets, and the scanner backend observes those packets without forcing the dashboard to wait. Every scan event is converted into a structured security signal containing identity hints, RSSI, advertisement frequency, service UUID count, manufacturer data length, payload length, timestamp, and event source.
 
-The frontend owns one WebSocket lifecycle manager. It does not attach duplicate listeners after reconnects. Incoming events are stored in a short buffer, then flushed in batches so the UI remains smooth while scanning. Device rows are merged by address, which prevents the table from jumping around during live monitoring.
+The backend then performs name resolution and validation. The name resolver tries to produce a useful display name from advertised names, cached names, manufacturer clues, service UUID guesses, and address suffixes. After enrichment, Pydantic validation acts as the gatekeeper. Invalid or malformed payloads stop at the backend and are not broadcast into the live monitor.
 
-The anomaly engine is evidence-driven. A new unknown device starts as Observing, not dangerous. After warmup, an unknown device can stay Low risk if its behavior is normal. A trusted device is only trusted after a baseline is saved. When live behavior moves outside baseline ranges or shows timing, payload, UUID, fingerprint, or identity collision problems, the risk score rises.
+Valid events move through the WebSocket stream. The frontend uses one WebSocket lifecycle manager so reconnects do not create duplicate listeners. Events are received immediately, placed into a short buffer, and flushed into React state in batches. This is what keeps the dashboard responsive during live scanning instead of freezing on every advertisement.
+
+Once events reach the dashboard state, devices are indexed by BLE address. The latest state for each address is kept fast to access, while recent history is capped to the useful window needed for scoring. That rolling history feeds timing checks, fingerprint checks, RSSI analysis, advertisement frequency behavior, payload drift, and service UUID changes.
+
+The anomaly engine does not treat unknown devices as guilty by default. A new device starts as Observing while enough evidence is collected. If it remains normal after warmup, it becomes Unregistered with Low risk. A device becomes Trusted only after a baseline is saved. When a trusted device deviates from its baseline, or when identity collision and behavior drift appear together, the risk level moves toward Suspicious, High, or Critical.
 
 High and Critical events are treated differently from ordinary scan noise. They update the alert banner immediately and are written into the hash-chain ledger. The ledger links each incident to the previous hash so local tampering becomes visible when integrity is checked.
 
-## Repository Structure
-
-```text
-BLE_TRUST-REGISTRY/
-  README.md
-  docs/
-    architecture.md
-    installation.md
-    troubleshooting.md
-    workflow.md
-  frontend/
-    app/
-    components/
-    lib/
-    package.json
-  scanner-backend/
-    main.py
-    models.py
-    name_resolver.py
-    scanner.py
-    requirements.txt
-  scripts/
-    start-dev.cmd
-    start-backend.cmd
-    start-frontend.cmd
-```
+The result is a live trust workflow: scan, enrich, validate, stream, buffer, index, score, alert, and record. Each stage has a clear responsibility, which keeps the project understandable, testable, and practical to run from a fresh clone.
 
 ## Installation
 
@@ -231,6 +210,16 @@ docs/workflow.md
 docs/installation.md
 docs/troubleshooting.md
 ```
+
+## Contributors
+
+| Name | Role | Responsibilities | Contact |
+| --- | --- | --- | --- |
+| Mithun Gowda B | Core Developer | Main development, full-stack development | mithungowda.b7411@gmail.com |
+| Nevil Dsouza | Team Leader | Core development, testing | nevilansondsouza@gmail.com |
+| Naren V | Developer | UI design | narenbhaskar2007@gmail.com |
+| Manas Habbu | Developer | Documentation, presentation, design | manaskiranhabbu@gmail.com |
+| Manasvi R | Developer | Documentation, presentation, design | manasvi0523@gmail.com |
 
 ## Ethical Scope
 
