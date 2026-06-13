@@ -50,108 +50,146 @@ to alerting and ledger evidence
 
 The dashboard is intentionally restrained. The live table and alert banner stay solid and readable. Secondary panels use controlled glassmorphism only as a background treatment. The UI direction is closer to Elastic SIEM and Grafana than to a neon showcase template.
 
-## High Level System Workflow
+## Architecture
+
+### System Component Overview
 
 ```mermaid
-flowchart LR
-    BLE["BLE Radio Environment"] --> Adapter["Local Bluetooth Adapter"]
-    Adapter --> Scanner["Async BLE Scanner"]
-    Scanner --> Enrich["Telemetry and Name Resolver"]
-    Enrich --> Validate{"Valid Scan Event?"}
-    Validate -->|"No"| Reject["Reject Payload"]
-    Validate -->|"Yes"| Queue["Bounded Broadcast Queue"]
-    Queue --> Stream["WebSocket Event Stream"]
-    Stream --> Buffer["Frontend Event Buffer"]
-    Buffer --> Store["Device State Map"]
-    Store --> Engine["Trust and Anomaly Engine"]
-    Engine --> Risk{"Risk Level"}
-    Risk -->|"Low"| Table["Live Device Table"]
-    Risk -->|"Medium"| Diagnosis["Diagnosis Panel"]
-    Risk -->|"High"| Alert["Immediate Alert Banner"]
-    Risk -->|"Critical"| Alert
-    Alert --> Ledger["Hash Chain Ledger"]
-    Table --> Dashboard["Monitoring Dashboard"]
-    Diagnosis --> Dashboard
-    Ledger --> Dashboard
+graph TD
+    A[scanner-backend/main.py<br/>FastAPI control plane] --> B[scanner-backend/scanner.py<br/>async Bleak scanner]
+    B --> C[scanner-backend/name_resolver.py<br/>display identity enrichment]
+    C --> D[scanner-backend/models.py<br/>Pydantic scan validation]
+    D --> E{Valid event?}
 
-    subgraph Backend["Backend"]
-        Scanner
-        Enrich
-        Validate
-        Reject
-        Queue
-        Stream
-    end
+    E -- no --> F[Reject payload<br/>before broadcast]
+    E -- yes --> G[Bounded broadcast queue<br/>drop oldest stale event under pressure]
+    G --> H[WebSocket stream<br/>/ws/scan-events]
+    A --> I[Status API<br/>/status]
 
-    subgraph Frontend["Frontend"]
-        Buffer
-        Store
-        Engine
-        Risk
-        Table
-        Diagnosis
-        Alert
-        Ledger
-        Dashboard
-    end
+    H --> J[frontend/lib/websocket.ts<br/>single socket lifecycle]
+    J --> K[frontend/app/page.tsx<br/>batched event ingestion]
+    K --> L[(Device state map<br/>indexed by address)]
+    K --> M[(Recent scan history<br/>capped useful window)]
+
+    L --> N[frontend/lib/anomalyEngine.ts<br/>trust scoring]
+    M --> N
+    N --> O[frontend/lib/behaviorProfile.ts<br/>baseline comparison]
+    N --> P[frontend/lib/temporalAnalyzer.ts<br/>timing analysis]
+    N --> Q[frontend/lib/fingerprintTracker.ts<br/>fingerprint drift]
+
+    O --> R{Risk level}
+    P --> R
+    Q --> R
+
+    R -- Low --> S[LiveDevicesTab.tsx<br/>trusted or observing]
+    R -- Medium --> T[DashboardTab.tsx<br/>suspicious diagnosis]
+    R -- High --> U[AlertBanner.tsx<br/>immediate anomaly alert]
+    R -- Critical --> V[AlertBanner.tsx<br/>trust violation alert]
+
+    U --> W[frontend/lib/hashChain.ts<br/>incident hash chain]
+    V --> W
+    W --> X[(Browser local storage<br/>baselines and ledger)]
+    S --> Y[browser<br/>http://localhost:3000]
+    T --> Y
+    U --> Y
+    V --> Y
 ```
 
-## Trust Decision Pipeline
-
-```mermaid
-flowchart TD
-    Event["Normalized BLE Event"] --> Known{"Saved Baseline?"}
-    Known -->|"No"| Warmup["Observe Unknown Device"]
-    Known -->|"Yes"| Compare["Compare With Trusted Baseline"]
-
-    Warmup --> UnknownSignals["Frequency, RSSI, Payload, UUID, Identity Evidence"]
-    Compare --> TrustedSignals["Baseline Drift Checks"]
-
-    UnknownSignals --> Score["Risk Score"]
-    TrustedSignals --> Score
-
-    Score --> Level{"Decision"}
-    Level -->|"Low"| Low["Trusted or Observing"]
-    Level -->|"Medium"| Medium["Suspicious"]
-    Level -->|"High"| High["Anomaly Detected"]
-    Level -->|"Critical"| Critical["Trust Violation"]
-
-    High --> AlertPath["Immediate Alert and Diagnosis"]
-    Critical --> AlertPath
-    AlertPath --> LedgerPath["Append Incident to Hash Chain Ledger"]
-```
-
-## Runtime Sequence
+### Baseline Capture Data Flow
 
 ```mermaid
 sequenceDiagram
-    participant Device as BLE Device
-    participant Backend as Scanner Backend
-    participant Queue as Event Queue
-    participant Socket as WebSocket
-    participant Dashboard as Dashboard State
-    participant Engine as Trust Engine
-    participant Ledger as Ledger
+    participant U as User
+    participant UI as Baseline Scanner Tab
+    participant WS as WebSocket Manager
+    participant API as FastAPI Backend
+    participant S as BLE Scanner
+    participant ST as Browser Storage
 
-    Device->>Backend: Advertisement detected
-    Backend->>Backend: Extract telemetry and resolve name
-    Backend->>Backend: Validate payload
-    Backend->>Queue: Enqueue latest useful event
-    alt Queue has capacity
-        Queue->>Queue: Keep event in order
-    else Queue under pressure
-        Queue->>Queue: Drop oldest stale event
+    U->>UI: Start monitoring
+    UI->>API: POST /start-monitoring
+    API->>S: Start async BLE scan
+    loop Live advertisements
+        S->>API: Validated BLE scan event
+        API->>WS: Broadcast event
+        WS->>UI: Batched device update
+        UI->>UI: Display candidate baseline devices
     end
-    Queue->>Socket: Broadcast scan event
-    Socket->>Dashboard: Batch event into device state
-    Dashboard->>Engine: Analyze latest state and recent history
-    Engine-->>Dashboard: Risk score, reason, recommendation
+    U->>UI: Save trusted baseline
+    UI->>ST: Persist behavior profile by address
+    UI-->>U: Baseline ready for live trust checks
+```
+
+### Live Monitoring Data Flow
+
+```mermaid
+sequenceDiagram
+    participant BLE as BLE Environment
+    participant S as scanner.py
+    participant API as main.py
+    participant WS as WebSocket Stream
+    participant UI as Dashboard State
+    participant AE as Anomaly Engine
+    participant HC as Hash Chain Ledger
+
+    BLE->>S: Advertisement detected
+    S->>S: Extract RSSI, UUIDs, payload, frequency, timestamps
+    S->>API: Submit structured scan event
+    API->>API: Validate event model
+    alt Invalid payload
+        API-->>S: Reject event
+    else Valid payload
+        API->>WS: Queue latest useful event
+    end
+    WS->>UI: Send event without blocking scanner
+    UI->>UI: Batch update by BLE address
+    UI->>AE: Score latest device state
+    AE-->>UI: Risk level, score, reasons
     alt High or Critical
-        Dashboard->>Dashboard: Render alert immediately
-        Engine->>Ledger: Append incident evidence
+        UI->>UI: Render alert immediately
+        AE->>HC: Append incident entry
     else Low or Medium risk
-        Dashboard->>Dashboard: Update table and panels smoothly
+        UI->>UI: Update table and diagnosis panels
     end
+```
+
+### Trust Scoring Workflow
+
+```mermaid
+flowchart TD
+    A[Normalized BLE Event<br/>address, name, RSSI, UUIDs, payload, frequency] --> B{Saved baseline exists?}
+
+    B -- no --> C[Observation path<br/>unknown device warmup]
+    B -- yes --> D[Baseline comparison<br/>trusted device drift checks]
+
+    C --> E[Runtime evidence]
+    D --> E
+
+    E --> F{RSSI drift?}
+    F -- yes --> F1[Add signal risk]
+    E --> G{Frequency spike?}
+    G -- yes --> G1[Add timing risk]
+    E --> H{Payload or UUID drift?}
+    H -- yes --> H1[Add fingerprint risk]
+    E --> I{Name or address mismatch?}
+    I -- yes --> I1[Add identity risk]
+
+    F1 --> J[Final risk score]
+    G1 --> J
+    H1 --> J
+    I1 --> J
+    E --> J
+
+    J --> K{Threshold}
+    K -- Low --> L[Trusted or Observing]
+    K -- Medium --> M[Suspicious]
+    K -- High --> N[Anomaly Detected]
+    K -- Critical --> O[Trust Violation]
+
+    N --> P[Immediate alert]
+    O --> P
+    P --> Q[Diagnosis panel]
+    P --> R[Hash chain incident log]
 ```
 
 ## Pipeline Explanation
