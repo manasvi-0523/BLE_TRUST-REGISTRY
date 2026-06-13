@@ -1,13 +1,21 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, Play, Save, Square } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Moon, Sun } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { AlertBanner } from "@/components/AlertBanner";
-import { Button } from "@/components/ui/button";
-import { Card, CardTitle } from "@/components/ui/card";
+import { AlertsTab } from "@/components/tabs/AlertsTab";
+import { AttackLabTab } from "@/components/tabs/AttackLabTab";
+import { BaselineScannerTab } from "@/components/tabs/BaselineScannerTab";
+import { BlockchainTab } from "@/components/tabs/BlockchainTab";
+import { DashboardTab } from "@/components/tabs/DashboardTab";
+import { LiveDevicesTab } from "@/components/tabs/LiveDevicesTab";
+import type { DeviceRow } from "@/components/tabs/types";
 import { calculateRiskScore, verifyAuthenticity } from "@/lib/anomalyEngine";
 import { getFingerprint } from "@/lib/fingerprintTracker";
 import { createLedgerEntry, verifyLedger } from "@/lib/hashChain";
+import { getTheme, toggleTheme, type Theme } from "@/lib/theme";
+import { scoreInterArrivalIrregularity, scoreRssiTrend, scoreTemporalBurst } from "@/lib/temporalAnalyzer";
 import {
   loadLedgerEntries,
   loadTrustedDevices,
@@ -20,11 +28,9 @@ import type {
   DeviceHistory,
   LedgerEntry,
   MonitoringState,
-  RiskResult,
   RuntimeAnalysis,
   ScannerStatusPayload,
-  TrustedDeviceBaseline,
-  TrustStatus
+  TrustedDeviceBaseline
 } from "@/lib/types";
 import { ScanWebSocketClient } from "@/lib/websocket";
 
@@ -32,11 +38,20 @@ const API = process.env.NEXT_PUBLIC_SCANNER_API || "http://127.0.0.1:8000";
 const WS = process.env.NEXT_PUBLIC_SCANNER_WS || "ws://127.0.0.1:8000/ws/scan-events";
 const MAX_DEBUG_EVENTS = 300;
 
-type DeviceRow = BLEDeviceScan & RiskResult & { observations: number };
 type IncomingScanEvent = Partial<BLEDeviceScan> & {
   name?: string | null;
   localName?: string | null;
 };
+type TabId = "dashboard" | "devices" | "blockchain" | "alerts" | "attack-lab" | "baselines";
+
+const tabs: Array<{ id: TabId; label: string }> = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "devices", label: "Live Devices" },
+  { id: "blockchain", label: "Blockchain" },
+  { id: "alerts", label: "Alerts" },
+  { id: "attack-lab", label: "Attack Lab" },
+  { id: "baselines", label: "Baseline Scanner" }
+];
 
 export default function DashboardPage() {
   const [connection, setConnection] = useState<ConnectionState>("Disconnected");
@@ -55,12 +70,16 @@ export default function DashboardPage() {
   const [trainingAddress, setTrainingAddress] = useState("");
   const [trainingStartedAt, setTrainingStartedAt] = useState<number | null>(null);
   const [trainingProgress, setTrainingProgress] = useState(0);
+  const [activeTab, setActiveTab] = useState<TabId>("dashboard");
+  const [theme, setThemeState] = useState<Theme>("dark");
   const bufferRef = useRef<BLEDeviceScan[]>([]);
   const wsRef = useRef<ScanWebSocketClient | null>(null);
+  const lastAlertedRef = useRef<Record<string, { level: string; time: number }>>({});
 
   useEffect(() => {
     setTrustedDevices(loadTrustedDevices());
     setLedger(loadLedgerEntries());
+    setThemeState(getTheme());
   }, []);
 
   const baselineByAddress = useMemo(
@@ -159,6 +178,10 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!highestActive || (highestActive.riskLevel !== "High" && highestActive.riskLevel !== "Critical")) return;
     setLedger((current) => {
+      const lastAlert = lastAlertedRef.current[highestActive.address];
+      if (lastAlert && lastAlert.level === highestActive.riskLevel && Date.now() - lastAlert.time < 60000) {
+        return current;
+      }
       if (current.some((entry) => entry.timestamp === highestActive.timestamp && entry.address === highestActive.address)) {
         return current;
       }
@@ -166,6 +189,7 @@ export default function DashboardPage() {
         ...current,
         createLedgerEntry(highestActive, highestActive, current.at(-1)?.currentHash || "GENESIS")
       ];
+      lastAlertedRef.current[highestActive.address] = { level: highestActive.riskLevel, time: Date.now() };
       saveLedgerEntries(next);
       return next;
     });
@@ -181,6 +205,11 @@ export default function DashboardPage() {
   }, []);
 
   const registerBaseline = useCallback((device: BLEDeviceScan) => {
+    const currentRisk = rows.find((row) => row.address === device.address);
+    if (baselineByAddress.has(device.address.toLowerCase()) && currentRisk && currentRisk.score > 20) {
+      window.alert("Cannot update baseline while device risk score is elevated. Wait for risk to stabilize below 20.");
+      return;
+    }
     const samples = debugEvents.filter((event) => event.address === device.address);
     if (samples.length === 0) return;
     const rssi = samples.map((event) => event.rssi);
@@ -208,237 +237,103 @@ export default function DashboardPage() {
     setTrainingAddress("");
     setTrainingStartedAt(null);
     setTrainingProgress(0);
-  }, [debugEvents, trustedDevices]);
+  }, [baselineByAddress, debugEvents, rows, trustedDevices]);
+
+  const ledgerValid = verifyLedger(ledger);
+  const changeTheme = () => setThemeState(toggleTheme());
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-4 text-slate-100">
+    <main className="min-h-screen bg-[var(--bg-base)] px-4 py-4 text-[var(--text-primary)]">
       <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
         <AlertBanner assessment={highestActive} device={highestActive} />
 
-        <section className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
-          <Stat label="Monitoring" value={monitoringState} />
-          <Stat label="Backend" value={connection} />
-          <Stat label="Scanner" value={scannerStatus.running ? "Running" : "Stopped"} />
-          <Stat label="Devices" value={String(rows.length)} />
-          <Stat label="Trusted" value={String(trustedDevices.length)} />
-          <Stat label="Ledger" value={verifyLedger(ledger) ? "Valid" : "Invalid"} />
-        </section>
+        <div className="surface flex flex-col gap-3 rounded-xl p-3 lg:flex-row lg:items-center lg:justify-between">
+          <nav className="flex flex-wrap gap-2">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
+                  activeTab === tab.id
+                    ? "border-cyan-600 bg-cyan-500/15 text-[var(--text-primary)]"
+                    : "border-[var(--border-color)] text-[var(--text-secondary)] hover:border-cyan-600"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+          <button
+            onClick={changeTheme}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card-elevated)] px-3 py-2 text-sm font-semibold"
+          >
+            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+            {theme === "dark" ? "Light Mode" : "Dark Mode"}
+          </button>
+        </div>
 
-        <section className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
-          <div className="flex flex-col gap-4">
-            <Card>
-              <CardTitle>Scanner Connection Status</CardTitle>
-              <StatusLine label="Backend" value={connection} />
-              <StatusLine label="Scanner" value={scannerStatus.running ? "Running" : "Stopped"} />
-              <StatusLine label="Adapter" value={scannerStatus.adapterStatus} />
-              <StatusLine label="WebSocket clients" value={String(scannerStatus.connectedClients)} />
-              <StatusLine label="Last scan" value={scannerStatus.lastScanTime ? new Date(scannerStatus.lastScanTime).toLocaleTimeString() : "None"} />
-            </Card>
-
-            <Card>
-              <CardTitle>Monitoring Controls</CardTitle>
-              <div className="grid gap-2">
-                <Button onClick={startMonitoring}><Play size={15} /> Start Real-Time Monitoring</Button>
-                <Button variant="ghost" onClick={stopMonitoring}><Square size={15} /> Stop Monitoring</Button>
-                <Button
-                  variant="ghost"
-                  disabled={!selected}
-                  onClick={() => {
-                    if (!selected) return;
-                    setTrainingAddress(selected.address);
-                    setTrainingStartedAt(Date.now());
-                  }}
-                >
-                  Train Baseline
-                </Button>
-                <Button variant="ghost" onClick={() => alert(verifyLedger(ledger) ? "Ledger integrity verified." : "Ledger integrity failed.")}>
-                  <CheckCircle2 size={15} /> Verify Ledger Integrity
-                </Button>
+        {trainingAddress && (
+          <section className="surface rounded-xl p-4 text-sm">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="font-semibold">Baseline training active</p>
+                <p className="font-mono text-xs text-[var(--text-secondary)]">{trainingAddress}</p>
               </div>
-              <p className="mt-3 text-xs text-slate-400">Auto-start Monitoring: OFF | Alert Mode: ON | Auto Log: ON</p>
-            </Card>
-          </div>
-
-          <section className="rounded-xl border border-slate-800 bg-slate-950">
-            <div className="border-b border-slate-800 px-4 py-3">
-              <h1 className="text-lg font-semibold">Live BLE Device Table</h1>
-              <p className="text-xs text-slate-400">Rows are merged by BLE address. Unknown normal devices stay low risk until evidence justifies escalation.</p>
+              <p>{trainingProgress}% | {debugEvents.filter((event) => event.address === trainingAddress).length} samples</p>
             </div>
-            <div className="max-h-[620px] overflow-auto">
-              <table className="w-full min-w-[1160px] border-collapse text-left text-xs">
-                <thead className="sticky top-0 bg-slate-950 text-slate-400">
-                  <tr>
-                    {["Display Name", "Address", "Name Source", "RSSI", "Frequency", "Services", "Payload", "Source", "Trust Status", "Risk", "Prediction", "Reason", "Action"].map((header) => (
-                      <th key={header} className="border-b border-slate-800 px-3 py-2 font-medium">{header}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <DeviceTableRow
-                      key={row.address}
-                      row={row}
-                      selected={selectedAddress === row.address}
-                      onSelect={setSelectedAddress}
-                      onRegister={registerBaseline}
-                    />
-                  ))}
-                  {rows.length === 0 && (
-                    <tr>
-                      <td colSpan={13} className="px-3 py-10 text-center text-slate-500">
-                        No BLE events yet. Start monitoring after the backend is connected.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="mt-3 h-2 rounded-full bg-slate-500/20">
+              <div className="h-2 rounded-full bg-cyan-700" style={{ width: `${trainingProgress}%` }} />
             </div>
           </section>
+        )}
 
-          <Card>
-            <CardTitle>Selected Device Diagnosis</CardTitle>
-            {selected ? (
-              <div className="space-y-3 text-sm">
-                <div>
-                  <p className="font-semibold">{selected.displayName}</p>
-                  <p className="font-mono text-xs text-slate-400">{selected.address}</p>
-                  <p className="text-xs text-slate-400">Name source: {selected.nameSource}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Badge status={selected.trustStatus} />
-                  <span className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-center">{selected.riskLevel} {selected.score}</span>
-                </div>
-                <p><span className="text-slate-400">Prediction:</span> {selected.prediction}</p>
-                <div>
-                  <p className="mb-1 text-slate-400">Evidence</p>
-                  <ul className="list-disc space-y-1 pl-5 text-slate-300">
-                    {selected.reasons.map((reason) => <li key={reason}>{reason}</li>)}
-                  </ul>
-                </div>
-                <p><span className="text-slate-400">Recommended action:</span> {selected.recommendedAction}</p>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-400">Select a device row for diagnosis.</p>
+        <AnimatePresence mode="wait">
+          <motion.section
+            key={activeTab}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18 }}
+          >
+            {activeTab === "dashboard" && (
+              <DashboardTab
+                rows={rows}
+                monitoringState={monitoringState}
+                connection={connection}
+                scannerStatus={scannerStatus}
+                trustedDevices={trustedDevices}
+                ledger={ledger}
+                ledgerValid={ledgerValid}
+                onStart={startMonitoring}
+                onStop={stopMonitoring}
+                onVerify={() => alert(ledgerValid ? "Ledger integrity verified." : "Ledger integrity failed.")}
+              />
             )}
-          </Card>
-        </section>
-
-        <section className="grid gap-4 xl:grid-cols-4">
-          <Card>
-            <CardTitle>Trusted Device Registry</CardTitle>
-            <div className="space-y-2 text-sm">
-              {trustedDevices.map((device) => (
-                <div key={device.address} className="rounded-lg border border-slate-800 bg-slate-950 p-3">
-                  <p className="font-medium">{device.displayName}</p>
-                  <p className="font-mono text-xs text-slate-500">{device.address}</p>
-                  <p className="text-xs text-slate-400">RSSI {device.rssiMin}-{device.rssiMax}, freq {device.frequencyMin}-{device.frequencyMax}</p>
-                </div>
-              ))}
-              {trustedDevices.length === 0 && <p className="text-slate-400">No trusted baselines registered.</p>}
-            </div>
-          </Card>
-
-          <Card>
-            <CardTitle>Baseline Training</CardTitle>
-            {trainingAddress ? (
-              <div className="space-y-3 text-sm">
-                <p className="font-mono text-xs text-slate-400">{trainingAddress}</p>
-                <div className="h-2 rounded-full bg-slate-800">
-                  <div className="h-2 rounded-full bg-cyan-700" style={{ width: `${trainingProgress}%` }} />
-                </div>
-                <p>Progress: {trainingProgress}%</p>
-                <p>Samples collected: {debugEvents.filter((event) => event.address === trainingAddress).length}</p>
-                <Button disabled={!selected} onClick={() => selected && registerBaseline(selected)}><Save size={15} /> Save Baseline</Button>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-400">Select a device and train for 60 seconds before saving a trusted baseline.</p>
+            {activeTab === "devices" && (
+              <LiveDevicesTab
+                rows={rows}
+                selectedAddress={selectedAddress}
+                onSelect={setSelectedAddress}
+                onRegister={registerBaseline}
+              />
             )}
-          </Card>
-
-          <Card>
-            <CardTitle>Authenticity Check</CardTitle>
-            {authenticity ? (
-              <div className="space-y-2 text-xs">
-                <p className="text-sm font-semibold">{authenticity.status}</p>
-                <p className="text-slate-400">{authenticity.reason}</p>
-                {authenticity.checks.map((check) => (
-                  <div key={check.label} className="rounded-md border border-slate-800 bg-slate-950 p-2">
-                    <p>{check.label}: {check.result}</p>
-                    <p className="text-slate-500">Baseline {check.registered} | Live {check.live}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-400">Authenticity requires a selected device.</p>
+            {activeTab === "blockchain" && <BlockchainTab ledger={ledger} ledgerValid={ledgerValid} />}
+            {activeTab === "alerts" && <AlertsTab ledger={ledger} />}
+            {activeTab === "attack-lab" && <AttackLabTab ledger={ledger} />}
+            {activeTab === "baselines" && (
+              <BaselineScannerTab
+                trustedDevices={trustedDevices}
+                runtime={runtime}
+                rows={rows}
+                onRecalibrate={registerBaseline}
+              />
             )}
-          </Card>
-
-          <section className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-            <h2 className="mb-3 text-base font-semibold">Hash-chain Ledger</h2>
-            <p className="mb-2 text-xs text-slate-400">High/Critical incidents only. Chain: {verifyLedger(ledger) ? "Valid" : "Invalid"}</p>
-            <div className="max-h-72 overflow-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="text-slate-400">
-                  <tr><th className="py-1">Time</th><th>Device</th><th>Risk</th><th>Hash</th></tr>
-                </thead>
-                <tbody>
-                  {ledger.map((entry) => (
-                    <tr key={entry.currentHash} className="border-t border-slate-800">
-                      <td className="py-2">{new Date(entry.timestamp).toLocaleTimeString()}</td>
-                      <td>{entry.deviceName}</td>
-                      <td>{entry.riskLevel}</td>
-                      <td className="font-mono text-slate-400">{entry.currentHash.slice(0, 10)}...</td>
-                    </tr>
-                  ))}
-                  {ledger.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-slate-500">No high-risk ledger entries.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </section>
+          </motion.section>
+        </AnimatePresence>
       </div>
     </main>
   );
 }
-
-const DeviceTableRow = memo(function DeviceTableRow({
-  row,
-  selected,
-  onSelect,
-  onRegister
-}: {
-  row: DeviceRow;
-  selected: boolean;
-  onSelect: (address: string) => void;
-  onRegister: (device: BLEDeviceScan) => void;
-}) {
-  return (
-    <tr className={selected ? "bg-slate-900" : "hover:bg-slate-900/60"} onClick={() => onSelect(row.address)}>
-      <td className="border-t border-slate-900 px-3 py-2 font-medium">{row.displayName}</td>
-      <td className="border-t border-slate-900 px-3 py-2 font-mono text-slate-300">{row.address}</td>
-      <td className="border-t border-slate-900 px-3 py-2">{row.nameSource}</td>
-      <td className="border-t border-slate-900 px-3 py-2">{row.rssi}</td>
-      <td className="border-t border-slate-900 px-3 py-2">{row.advertisementFrequency.toFixed(1)}</td>
-      <td className="border-t border-slate-900 px-3 py-2">{row.serviceUuidCount}</td>
-      <td className="border-t border-slate-900 px-3 py-2">{row.payloadLengthApprox}</td>
-      <td className="border-t border-slate-900 px-3 py-2">{row.source}</td>
-      <td className="border-t border-slate-900 px-3 py-2"><Badge status={row.trustStatus} /></td>
-      <td className="border-t border-slate-900 px-3 py-2">{row.riskLevel} {row.score}</td>
-      <td className="border-t border-slate-900 px-3 py-2">{row.prediction}</td>
-      <td className="border-t border-slate-900 px-3 py-2 text-slate-300">{row.reasons[0]}</td>
-      <td className="border-t border-slate-900 px-3 py-2">
-        {(row.trustStatus === "Observing" || row.trustStatus === "Unregistered") && (
-          <button className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-slate-200" onClick={(event) => {
-            event.stopPropagation();
-            onRegister(row);
-          }}>
-            Register Baseline
-          </button>
-        )}
-      </td>
-    </tr>
-  );
-});
 
 function normalizeEvent(event: IncomingScanEvent): BLEDeviceScan {
   const address = String(event.address || "unknown-address").trim() || "unknown-address";
@@ -475,6 +370,8 @@ function buildRuntimeAnalysis(events: BLEDeviceScan[]): RuntimeAnalysis {
   const seenAddressesByName: Record<string, string[]> = {};
   const seenNamesByAddress: Record<string, string[]> = {};
   const fingerprintsByAddress: Record<string, Set<string>> = {};
+  const latestTimestampByAddress: Record<string, number> = {};
+  const latestFingerprintByAddress: Record<string, string> = {};
 
   events.forEach((event) => {
     const history = histories[event.address] || {
@@ -490,49 +387,47 @@ function buildRuntimeAnalysis(events: BLEDeviceScan[]): RuntimeAnalysis {
     history.serviceUuidCount = [...history.serviceUuidCount, event.serviceUuidCount].slice(-50);
     history.timestamps = [...history.timestamps, new Date(event.timestamp).getTime()].slice(-300);
     histories[event.address] = history;
+    latestTimestampByAddress[event.address] = new Date(event.timestamp).getTime();
+    latestFingerprintByAddress[event.address] = getFingerprint(event);
 
     seenAddressesByName[event.displayName] = [...new Set([...(seenAddressesByName[event.displayName] || []), event.address])];
     seenNamesByAddress[event.address] = [...new Set([...(seenNamesByAddress[event.address] || []), event.displayName])];
     fingerprintsByAddress[event.address] = fingerprintsByAddress[event.address] || new Set();
     fingerprintsByAddress[event.address].add(getFingerprint(event));
   });
+  const consecutiveAnomalyCount: Record<string, number> = {};
+  Object.entries(histories).forEach(([address, history]) => {
+    const burst = scoreTemporalBurst(history.timestamps);
+    const timing = scoreInterArrivalIrregularity(history.timestamps);
+    const trend = scoreRssiTrend(history.rssi);
+    const latestFrequency = history.frequency.at(-1) || 0;
+    const latestPayload = history.payloadLength.at(-1) || 0;
+    const anomalous = burst.score > 0 || timing.score > 0 || trend.score > 0 || latestFrequency > 50 || latestPayload > 200;
+    consecutiveAnomalyCount[address] = anomalous ? Math.min(99, Math.max(1, history.timestamps.length)) : 0;
+  });
+
+  const activeCutoff = Date.now() - 30000;
+  const addressesByFingerprint: Record<string, string[]> = {};
+  Object.entries(latestFingerprintByAddress).forEach(([address, fingerprint]) => {
+    if ((latestTimestampByAddress[address] || 0) < activeCutoff) return;
+    addressesByFingerprint[fingerprint] = [...(addressesByFingerprint[fingerprint] || []), address];
+  });
+  const simultaneousDuplicateFingerprints = [
+    ...new Set(
+      Object.values(addressesByFingerprint)
+        .filter((addresses) => addresses.length > 1)
+        .flat()
+    )
+  ];
 
   return {
     histories,
     seenAddressesByName,
     seenNamesByAddress,
-    fingerprintCounts: Object.fromEntries(Object.entries(fingerprintsByAddress).map(([address, values]) => [address, values.size]))
+    fingerprintCounts: Object.fromEntries(Object.entries(fingerprintsByAddress).map(([address, values]) => [address, values.size])),
+    consecutiveAnomalyCount,
+    simultaneousDuplicateFingerprints
   };
-}
-
-function Badge({ status }: { status: TrustStatus }) {
-  const classes =
-    status === "Trusted"
-      ? "bg-emerald-950 text-emerald-300 border-emerald-800"
-      : status === "Suspicious"
-        ? "bg-amber-950 text-amber-300 border-amber-800"
-        : status === "Trust Violated"
-          ? "bg-red-950 text-red-300 border-red-800"
-          : "bg-slate-800 text-slate-300 border-slate-700";
-  return <span className={`inline-flex rounded border px-2 py-1 text-xs ${classes}`}>{status}</span>;
-}
-
-function StatusLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between border-b border-slate-800 py-2 text-sm last:border-b-0">
-      <span className="text-slate-400">{label}</span>
-      <span className="font-medium">{value}</span>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3">
-      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold text-slate-100">{value}</p>
-    </div>
-  );
 }
 
 function average(values: number[]) {

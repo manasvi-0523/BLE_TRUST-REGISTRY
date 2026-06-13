@@ -1,6 +1,6 @@
 import { capContribution, getZScore } from "./behaviorProfile";
 import { isMeaningfulName, scoreFingerprintConsistency } from "./fingerprintTracker";
-import { scoreInterArrivalIrregularity, scoreTemporalBurst } from "./temporalAnalyzer";
+import { scoreInterArrivalIrregularity, scoreRssiTrend, scoreTemporalBurst } from "./temporalAnalyzer";
 import type {
   AuthenticityResult,
   BLEDeviceScan,
@@ -17,6 +17,56 @@ export function classifyRisk(score: number): RiskLevel {
   if (score <= 60) return "Medium";
   if (score <= 80) return "High";
   return "Critical";
+}
+
+export function classifyRiskBySignals(signals: {
+  hasBehavioralAnomaly: boolean;
+  hasBaselineDeviation: boolean;
+  hasIdentityAnomaly: boolean;
+  hasFingerprintMismatch: boolean;
+  hasSimultaneousDuplicate: boolean;
+  consecutiveAnomalyCount: number;
+}): RiskLevel {
+  if (signals.hasSimultaneousDuplicate) return "Critical";
+  if (signals.hasIdentityAnomaly && signals.hasFingerprintMismatch) return "Critical";
+  if (signals.hasIdentityAnomaly && signals.hasBaselineDeviation) return "Critical";
+  if (signals.hasBehavioralAnomaly && signals.hasBaselineDeviation) return "High";
+  if (signals.hasBehavioralAnomaly && signals.consecutiveAnomalyCount >= 3) return "Medium";
+  if (signals.hasBehavioralAnomaly && signals.consecutiveAnomalyCount < 3) return "Low";
+  return "Low";
+}
+
+export function calculateConfidence(
+  observationCount: number,
+  hasBaseline: boolean,
+  signalCount: number,
+  fingerprintChanges: number
+) {
+  let confidence = Math.min(30, observationCount * 3);
+  if (hasBaseline) confidence += 25;
+  confidence += Math.min(30, signalCount * 10);
+  if (fingerprintChanges <= 1) confidence += 15;
+  else confidence -= fingerprintChanges * 5;
+  return Math.max(0, Math.min(100, Math.round(confidence)));
+}
+
+export function calculateTrustScore(
+  hasBaseline: boolean,
+  riskLevel: RiskLevel,
+  observationCount: number,
+  trustAge: number,
+  consecutiveCleanScans: number
+) {
+  if (!hasBaseline) return Math.min(42, observationCount * 2);
+  let trust = 50;
+  const daysSinceRegistered = trustAge / (1000 * 60 * 60 * 24);
+  trust += Math.min(20, daysSinceRegistered * (20 / 7));
+  trust += Math.min(20, consecutiveCleanScans);
+  if (riskLevel === "Critical") trust -= 60;
+  else if (riskLevel === "High") trust -= 40;
+  else if (riskLevel === "Medium") trust -= 20;
+  trust += Math.min(10, observationCount * 0.5);
+  return Math.max(0, Math.min(100, Math.round(trust)));
 }
 
 export function detectNameAddressMismatch(device: BLEDeviceScan, baselines: TrustedDeviceBaseline[]) {
@@ -118,6 +168,8 @@ export function calculateRiskScore(
   if (!baselineOrNull && !warmedUp) {
     return {
       score,
+      confidence: calculateConfidence(observationCount, false, 0, 1),
+      trustScore: calculateTrustScore(false, "Low", observationCount, 0, observationCount),
       riskLevel: "Low",
       prediction: "Observing",
       trustStatus: "Observing",
@@ -128,15 +180,17 @@ export function calculateRiskScore(
 
   const burst = scoreTemporalBurst(history.timestamps);
   const timing = scoreInterArrivalIrregularity(history.timestamps);
+  const rssiTrend = scoreRssiTrend(history.rssi);
   const fingerprint = scoreFingerprintConsistency(runtime.fingerprintCounts[device.address] || 1);
-  for (const evidence of [burst, timing, fingerprint]) {
+  for (const evidence of [burst, timing, rssiTrend, fingerprint]) {
     if (evidence.score) {
       score += evidence.score;
       reasons.push(evidence.reason);
     }
   }
 
-  if (detectNameAddressMismatch(device, allBaselines)) {
+  const hasIdentityAnomaly = detectNameAddressMismatch(device, allBaselines);
+  if (hasIdentityAnomaly) {
     score += 30;
     reasons.push("Same trusted name appeared from a different address.");
   }
@@ -147,17 +201,21 @@ export function calculateRiskScore(
     reasons.push("Same address is broadcasting multiple meaningful names.");
   }
 
+  let hasBaselineDeviation = false;
   if (baselineOrNull) {
     let frequencyScore = 0;
     const frequencyZ = getZScore(history.frequency, device.advertisementFrequency);
     if (frequencyZ > 3.5) {
+      hasBaselineDeviation = true;
       frequencyScore += 30;
       reasons.push(`Frequency deviation z-score: ${frequencyZ.toFixed(1)}.`);
     } else if (frequencyZ > 2.0) {
+      hasBaselineDeviation = true;
       frequencyScore += 15;
       reasons.push(`Frequency variation is unusual (z-score ${frequencyZ.toFixed(1)}).`);
     }
     if (device.advertisementFrequency < baselineOrNull.frequencyMin || device.advertisementFrequency > baselineOrNull.frequencyMax) {
+      hasBaselineDeviation = true;
       frequencyScore += 15;
       reasons.push("Advertisement frequency is outside the saved baseline range.");
     }
@@ -166,10 +224,12 @@ export function calculateRiskScore(
     let rssiScore = 0;
     const rssiZ = getZScore(history.rssi, device.rssi);
     if (rssiZ > 3.5) {
+      hasBaselineDeviation = true;
       rssiScore += 15;
       reasons.push(`RSSI deviation z-score: ${rssiZ.toFixed(1)}.`);
     }
     if (device.rssi < baselineOrNull.rssiMin || device.rssi > baselineOrNull.rssiMax) {
+      hasBaselineDeviation = true;
       rssiScore += 10;
       reasons.push("RSSI is outside the trusted baseline range.");
     }
@@ -178,10 +238,12 @@ export function calculateRiskScore(
     let payloadScore = 0;
     const payloadZ = getZScore(history.payloadLength, device.payloadLengthApprox);
     if (payloadZ > 3.0) {
+      hasBaselineDeviation = true;
       payloadScore += 15;
       reasons.push(`Payload length deviation z-score: ${payloadZ.toFixed(1)}.`);
     }
     if (device.payloadLengthApprox < baselineOrNull.payloadLengthMin || device.payloadLengthApprox > baselineOrNull.payloadLengthMax) {
+      hasBaselineDeviation = true;
       payloadScore += 15;
       reasons.push("Payload length is outside the trusted baseline range.");
     }
@@ -190,10 +252,12 @@ export function calculateRiskScore(
     let serviceScore = 0;
     const serviceZ = getZScore(history.serviceUuidCount, device.serviceUuidCount);
     if (serviceZ > 2.0) {
+      hasBaselineDeviation = true;
       serviceScore += 20;
       reasons.push(`Service UUID count deviation z-score: ${serviceZ.toFixed(1)}.`);
     }
     if (device.serviceUuidCount !== baselineOrNull.serviceUuidCount) {
+      hasBaselineDeviation = true;
       serviceScore += 15;
       reasons.push("Service UUID count differs from the trusted baseline.");
     }
@@ -211,12 +275,36 @@ export function calculateRiskScore(
   }
 
   const finalScore = Math.max(0, Math.min(100, score));
-  const riskLevel = classifyRisk(finalScore);
+  const hasBehavioralAnomaly = burst.score > 0 || timing.score > 0 || rssiTrend.score > 0 || finalScore > (baselineOrNull ? 20 : 25);
+  const hasFingerprintMismatch = (runtime.fingerprintCounts[device.address] || 1) >= 2;
+  const hasSimultaneousDuplicate = runtime.simultaneousDuplicateFingerprints.includes(device.address);
+  if (hasSimultaneousDuplicate) {
+    reasons.unshift("Duplicate fingerprint detected across two simultaneously active devices.");
+  }
+  const signalCount = [
+    hasBehavioralAnomaly,
+    hasBaselineDeviation,
+    hasIdentityAnomaly,
+    hasFingerprintMismatch,
+    hasSimultaneousDuplicate
+  ].filter(Boolean).length;
+  const riskLevel = classifyRiskBySignals({
+    hasBehavioralAnomaly,
+    hasBaselineDeviation,
+    hasIdentityAnomaly,
+    hasFingerprintMismatch,
+    hasSimultaneousDuplicate,
+    consecutiveAnomalyCount: runtime.consecutiveAnomalyCount[device.address] || 0
+  });
   const prediction = getPrediction(riskLevel, Boolean(baselineOrNull), warmedUp);
   const trustStatus = getTrustStatus(riskLevel, Boolean(baselineOrNull), warmedUp);
+  const trustAge = baselineOrNull ? Date.now() - new Date(baselineOrNull.registeredAt).getTime() : 0;
+  const consecutiveCleanScans = Math.max(0, observationCount - (runtime.consecutiveAnomalyCount[device.address] || 0));
 
   return {
     score: finalScore,
+    confidence: calculateConfidence(observationCount, Boolean(baselineOrNull), signalCount, runtime.fingerprintCounts[device.address] || 1),
+    trustScore: calculateTrustScore(Boolean(baselineOrNull), riskLevel, observationCount, trustAge, consecutiveCleanScans),
     riskLevel,
     prediction,
     trustStatus,

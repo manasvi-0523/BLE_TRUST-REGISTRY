@@ -2,19 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
+:root,
+.light {
+  --bg-base: #f0f2f5;
+  --bg-card: rgba(255, 255, 255, 0.68);
+  --bg-card-elevated: rgba(255, 255, 255, 0.9);
+  --shadow-card: 6px 6px 12px #d1d5db, -6px -6px 12px #ffffff;
+  --text-primary: #1a1a2e;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --border-color: rgba(0, 0, 0, 0.08);
+  --accent-cyan: #0891b2;
+  --accent-emerald: #059669;
+  --accent-amber: #d97706;
+  --accent-red: #dc2626;
+}
+
+.dark {
+  --bg-base: #020617;
+  --bg-card: rgba(15, 23, 42, 0.7);
+  --bg-card-elevated: rgba(15, 23, 42, 0.92);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.24);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-color: rgba(51, 65, 85, 0.6);
+  --accent-cyan: #22d3ee;
+  --accent-emerald: #34d399;
+  --accent-amber: #fbbf24;
+  --accent-red: #f87171;
+}
+
 * {
   box-sizing: border-box;
 }
 
-html {
-  background: #020617;
-}
-
+html,
 body {
   min-height: 100vh;
   margin: 0;
-  background: #020617;
-  color: #f1f5f9;
+  background: var(--bg-base);
+  color: var(--text-primary);
 }
 
 button,
@@ -24,8 +52,26 @@ select {
 }
 
 .glass {
-  border: 1px solid rgba(51, 65, 85, 0.6);
-  background: rgba(15, 23, 42, 0.7);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-card);
   backdrop-filter: blur(12px);
+}
+
+.surface {
+  border: 1px solid var(--border-color);
+  background: var(--bg-card-elevated);
+  color: var(--text-primary);
+}
+
+.text-primary {
+  color: var(--text-primary);
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.text-muted {
+  color: var(--text-muted);
 }

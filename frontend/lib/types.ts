@@ -63,6 +63,8 @@ export type TrustStatus =
 
 export type RiskResult = {
   score: number;
+  confidence: number;
+  trustScore: number;
   riskLevel: RiskLevel;
   prediction: Prediction;
   trustStatus: TrustStatus;
@@ -111,6 +113,8 @@ export type RuntimeAnalysis = {
   seenAddressesByName: Record<string, string[]>;
   seenNamesByAddress: Record<string, string[]>;
   fingerprintCounts: Record<string, number>;
+  consecutiveAnomalyCount: Record<string, number>;
+  simultaneousDuplicateFingerprints: string[];
 };
 
 export type AuthenticityResult = {
