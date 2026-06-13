@@ -23,6 +23,11 @@ export type BLEDeviceScan = {
   manufacturerDataLength: number;
   advertisementFrequency: number;
   payloadLengthApprox: number;
+  txPower?: number | null;
+  advertisementType?: string | null;
+  rawAdvertisementDataLength?: number | null;
+  firstSeenAt?: string | null;
+  lastSeenAt?: string | null;
   source: EventSource;
 };
 
@@ -134,4 +139,5 @@ export type ScannerStatusPayload = {
   connectedClients: number;
   adapterStatus: string;
   lastScanTime: string | null;
+  broadcastQueueSize: number;
 };

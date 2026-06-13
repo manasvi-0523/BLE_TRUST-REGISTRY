@@ -61,7 +61,8 @@ export default function DashboardPage() {
     running: false,
     connectedClients: 0,
     adapterStatus: "unknown",
-    lastScanTime: null
+    lastScanTime: null,
+    broadcastQueueSize: 0
   });
   const [devices, setDevices] = useState<BLEDeviceScan[]>([]);
   const [debugEvents, setDebugEvents] = useState<BLEDeviceScan[]>([]);
@@ -373,6 +374,11 @@ function normalizeEvent(event: IncomingScanEvent): BLEDeviceScan {
     advertisementFrequency: Number(event.advertisementFrequency ?? 0),
     manufacturerDataLength: Number(event.manufacturerDataLength ?? 0),
     payloadLengthApprox: Number(event.payloadLengthApprox ?? 0),
+    txPower: event.txPower ?? null,
+    advertisementType: event.advertisementType ?? null,
+    rawAdvertisementDataLength: event.rawAdvertisementDataLength ?? null,
+    firstSeenAt: event.firstSeenAt ?? null,
+    lastSeenAt: event.lastSeenAt ?? null,
     serviceUuidCount: Number(event.serviceUuidCount ?? event.serviceUuids?.length ?? 0),
     nameSource: event.nameSource || "address_suffix",
     serviceUuids: event.serviceUuids || [],

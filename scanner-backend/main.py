@@ -61,7 +61,16 @@ async def enqueue_event(event: BLEScanEvent):
     try:
         event_queue.put_nowait(event)
     except asyncio.QueueFull:
-        logger.warning("Dropping scan event because broadcast queue is full: %s", event.address)
+        try:
+            event_queue.get_nowait()
+            event_queue.task_done()
+        except asyncio.QueueEmpty:
+            pass
+        try:
+            event_queue.put_nowait(event)
+            logger.warning("Dropped oldest scan event because broadcast queue was full.")
+        except asyncio.QueueFull:
+            logger.warning("Dropping scan event because broadcast queue is full: %s", event.address)
 
 
 scanner = BLEScannerService(on_event=enqueue_event)
@@ -85,6 +94,7 @@ async def status():
         connectedClients=len(manager.clients),
         adapterStatus=scanner.adapter_status,
         lastScanTime=scanner.last_scan_time,
+        broadcastQueueSize=event_queue.qsize(),
     )
 
 

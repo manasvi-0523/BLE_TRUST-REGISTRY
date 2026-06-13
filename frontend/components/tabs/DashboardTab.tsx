@@ -66,6 +66,7 @@ export function DashboardTab({
           <Stat label="Devices" value={String(rows.length)} />
           <Stat label="Baselines" value={String(trustedDevices.length)} />
           <Stat label="Ledger" value={ledgerValid ? "Valid" : "Invalid"} />
+          <Stat label="Queue" value={String(scannerStatus.broadcastQueueSize ?? 0)} />
         </section>
 
         <Card>
@@ -96,4 +97,3 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-

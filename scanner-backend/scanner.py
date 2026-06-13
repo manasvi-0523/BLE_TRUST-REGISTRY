@@ -24,6 +24,8 @@ class BLEScannerService:
         self._scanner = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._sightings: dict[str, deque[datetime]] = defaultdict(lambda: deque(maxlen=500))
+        self._first_seen: dict[str, datetime] = {}
+        self._last_seen: dict[str, datetime] = {}
 
     async def discover_devices(self, timeout: float = 10.0):
         if BleakScanner is None:
@@ -41,7 +43,7 @@ class BLEScannerService:
             raise RuntimeError("Bleak is not available. Install scanner-backend requirements first.")
 
         self._loop = asyncio.get_running_loop()
-        self._scanner = BleakScanner(detection_callback=self._on_detection)
+        self._scanner = self._create_scanner()
         await self._scanner.start()
         self.running = True
         self.adapter_status = "scanning"
@@ -59,9 +61,19 @@ class BLEScannerService:
             return
         self._loop.create_task(self._handle_detection(device, advertisement_data))
 
+    def _create_scanner(self):
+        try:
+            return BleakScanner(detection_callback=self._on_detection, scanning_mode="active")
+        except TypeError:
+            return BleakScanner(detection_callback=self._on_detection)
+        except Exception:
+            return BleakScanner(detection_callback=self._on_detection)
+
     async def _handle_detection(self, device, advertisement_data):
         now = datetime.now(timezone.utc)
         address = getattr(device, "address", "") or "UNKNOWN"
+        first_seen = self._first_seen.setdefault(address, now)
+        self._last_seen[address] = now
         service_uuids = getattr(advertisement_data, "service_uuids", None) or []
         advertised_name = (
             getattr(advertisement_data, "local_name", None)
@@ -73,6 +85,10 @@ class BLEScannerService:
         manufacturer_data = getattr(advertisement_data, "manufacturer_data", None) or {}
         manufacturer_length = sum(len(bytes(value)) for value in manufacturer_data.values())
         payload_length = manufacturer_length + sum(len(str(uuid)) for uuid in service_uuids)
+        tx_power = getattr(advertisement_data, "tx_power", None)
+        platform_data = getattr(advertisement_data, "platform_data", None) or ()
+        advertisement_type = self._advertisement_type(platform_data)
+        raw_advertisement_length = self._raw_advertisement_length(advertisement_data, manufacturer_length, service_uuids)
 
         event = BLEScanEvent(
             rawName=advertised_name,
@@ -89,6 +105,11 @@ class BLEScannerService:
             manufacturerDataLength=manufacturer_length,
             advertisementFrequency=self._frequency_for(address, now),
             payloadLengthApprox=payload_length,
+            txPower=float(tx_power) if tx_power is not None else None,
+            advertisementType=advertisement_type,
+            rawAdvertisementDataLength=raw_advertisement_length,
+            firstSeenAt=first_seen,
+            lastSeenAt=now,
             source="realtime-scanner",
         )
         self.last_scan_time = now
@@ -101,3 +122,16 @@ class BLEScannerService:
         while window and window[0].timestamp() < cutoff:
             window.popleft()
         return round(len(window) / 10, 1)
+
+    def _advertisement_type(self, platform_data) -> str:
+        for value in platform_data:
+            name = value.__class__.__name__.lower()
+            if "advertisement" in name or "adv" in name:
+                return str(value)
+        return "unknown"
+
+    def _raw_advertisement_length(self, advertisement_data, manufacturer_length: int, service_uuids: list[str]) -> int:
+        service_data = getattr(advertisement_data, "service_data", None) or {}
+        service_data_length = sum(len(bytes(value)) for value in service_data.values())
+        local_name = getattr(advertisement_data, "local_name", None) or ""
+        return manufacturer_length + service_data_length + len(local_name.encode("utf-8")) + sum(len(str(uuid)) for uuid in service_uuids)

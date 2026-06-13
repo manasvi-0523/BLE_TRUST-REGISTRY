@@ -30,6 +30,11 @@ class BLEScanEvent(BaseModel):
     manufacturerDataLength: int = Field(ge=0)
     advertisementFrequency: float = Field(ge=0)
     payloadLengthApprox: int = Field(ge=0)
+    txPower: float | None = None
+    advertisementType: str | None = None
+    rawAdvertisementDataLength: int | None = Field(default=None, ge=0)
+    firstSeenAt: datetime | None = None
+    lastSeenAt: datetime | None = None
     source: ScanSource
 
     @field_validator("address")
@@ -53,3 +58,4 @@ class ScannerStatus(BaseModel):
     connectedClients: int = 0
     adapterStatus: str = "unknown"
     lastScanTime: datetime | None = None
+    broadcastQueueSize: int = 0
