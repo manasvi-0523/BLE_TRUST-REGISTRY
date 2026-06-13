@@ -7,12 +7,20 @@ export function BaselineScannerTab({
   trustedDevices,
   runtime,
   rows,
+  trainingAddress,
+  trainingProgress,
+  onStartTraining,
+  onForceSave,
   onRecalibrate
 }: {
   trustedDevices: TrustedDeviceBaseline[];
   runtime: RuntimeAnalysis;
   rows: DeviceRow[];
-  onRecalibrate: (device: BLEDeviceScan) => void;
+  trainingAddress: string;
+  trainingProgress: number;
+  onStartTraining: (device: BLEDeviceScan) => void;
+  onForceSave: (device: BLEDeviceScan) => void;
+  onRecalibrate: (device: BLEDeviceScan, forceDemoOverride?: boolean) => void;
 }) {
   return (
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -29,7 +37,15 @@ export function BaselineScannerTab({
             <Range label="Payload" min={device.payloadLengthMin} max={device.payloadLengthMax} live={live?.payloadLengthApprox} />
             <p className="mt-3 text-sm">Service UUID count: {device.serviceUuidCount}{live && live.serviceUuidCount !== device.serviceUuidCount ? " | changed live" : ""}</p>
             <Sparkline values={history?.rssi || []} />
-            {live && <Button className="mt-3 w-full" onClick={() => onRecalibrate(live)}>Recalibrate Baseline</Button>}
+            {live && (
+              <div className="mt-3 grid gap-2">
+                <Button variant="ghost" onClick={() => onStartTraining(live)}>
+                  {trainingAddress === live.address ? `Training ${trainingProgress}%` : "Start Training"}
+                </Button>
+                <Button onClick={() => onRecalibrate(live)}>Recalibrate Baseline</Button>
+                <Button variant="warning" onClick={() => onForceSave(live)}>Demo Override Save</Button>
+              </div>
+            )}
           </Card>
         );
       })}
@@ -69,4 +85,3 @@ function Sparkline({ values }: { values: number[] }) {
     </svg>
   );
 }
-

@@ -24,6 +24,7 @@ export function classifyRiskBySignals(signals: {
   hasBaselineDeviation: boolean;
   hasIdentityAnomaly: boolean;
   hasFingerprintMismatch: boolean;
+  hasStrongFingerprintMismatch: boolean;
   hasSimultaneousDuplicate: boolean;
   consecutiveAnomalyCount: number;
 }): RiskLevel {
@@ -158,7 +159,8 @@ export function calculateRiskScore(
     frequency: [],
     payloadLength: [],
     serviceUuidCount: [],
-    timestamps: []
+    timestamps: [],
+    anomalyFlags: []
   };
   const observationCount = Math.max(history.timestamps.length, 1);
   const warmedUp = observationCount >= 5;
@@ -275,8 +277,16 @@ export function calculateRiskScore(
   }
 
   const finalScore = Math.max(0, Math.min(100, score));
-  const hasBehavioralAnomaly = burst.score > 0 || timing.score > 0 || rssiTrend.score > 0 || finalScore > (baselineOrNull ? 20 : 25);
-  const hasFingerprintMismatch = (runtime.fingerprintCounts[device.address] || 1) >= 2;
+  const frequencyZ = getZScore(history.frequency, device.advertisementFrequency);
+  const rssiZ = getZScore(history.rssi, device.rssi);
+  const hasBehavioralAnomaly = burst.score > 0 || timing.score > 0 || rssiTrend.score > 0 || frequencyZ > 2.0 || rssiZ > 3.5;
+  const fingerprintCount = runtime.fingerprintCounts[device.address] || 1;
+  const hasFingerprintDrift = fingerprintCount === 2;
+  const hasFingerprintMismatch = fingerprintCount >= 3;
+  const hasStrongFingerprintMismatch = fingerprintCount >= 4;
+  if (hasFingerprintDrift && !hasFingerprintMismatch) {
+    reasons.push("Minor fingerprint drift observed. Continue monitoring before escalation.");
+  }
   const hasSimultaneousDuplicate = runtime.simultaneousDuplicateFingerprints.includes(device.address);
   if (hasSimultaneousDuplicate) {
     reasons.unshift("Duplicate fingerprint detected across two simultaneously active devices.");
@@ -286,6 +296,7 @@ export function calculateRiskScore(
     hasBaselineDeviation,
     hasIdentityAnomaly,
     hasFingerprintMismatch,
+    hasStrongFingerprintMismatch,
     hasSimultaneousDuplicate
   ].filter(Boolean).length;
   const riskLevel = classifyRiskBySignals({
@@ -293,6 +304,7 @@ export function calculateRiskScore(
     hasBaselineDeviation,
     hasIdentityAnomaly,
     hasFingerprintMismatch,
+    hasStrongFingerprintMismatch,
     hasSimultaneousDuplicate,
     consecutiveAnomalyCount: runtime.consecutiveAnomalyCount[device.address] || 0
   });

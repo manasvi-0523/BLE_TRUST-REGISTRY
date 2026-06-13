@@ -106,6 +106,7 @@ export type DeviceHistory = {
   payloadLength: number[];
   serviceUuidCount: number[];
   timestamps: number[];
+  anomalyFlags: boolean[];
 };
 
 export type RuntimeAnalysis = {

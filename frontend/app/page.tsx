@@ -11,7 +11,8 @@ import { BlockchainTab } from "@/components/tabs/BlockchainTab";
 import { DashboardTab } from "@/components/tabs/DashboardTab";
 import { LiveDevicesTab } from "@/components/tabs/LiveDevicesTab";
 import type { DeviceRow } from "@/components/tabs/types";
-import { calculateRiskScore, verifyAuthenticity } from "@/lib/anomalyEngine";
+import { calculateRiskScore } from "@/lib/anomalyEngine";
+import { getZScore } from "@/lib/behaviorProfile";
 import { getFingerprint } from "@/lib/fingerprintTracker";
 import { createLedgerEntry, verifyLedger } from "@/lib/hashChain";
 import { getTheme, toggleTheme, type Theme } from "@/lib/theme";
@@ -104,16 +105,11 @@ export default function DashboardPage() {
       .sort((a, b) => riskRank(b.riskLevel) - riskRank(a.riskLevel) || b.timestamp.localeCompare(a.timestamp));
   }, [baselineByAddress, devices, runtime, trustedDevices]);
 
-  const selected = rows.find((row) => row.address === selectedAddress) || rows[0] || null;
   const activeRows = useMemo(() => {
     const cutoff = Date.now() - 30000;
     return rows.filter((row) => new Date(row.timestamp).getTime() >= cutoff);
   }, [rows]);
   const highestActive = activeRows[0] || null;
-  const authenticity = selected
-    ? verifyAuthenticity(selected, baselineByAddress.get(selected.address.toLowerCase()) || null)
-    : null;
-
   useEffect(() => {
     const client = new ScanWebSocketClient(WS);
     wsRef.current = client;
@@ -204,14 +200,33 @@ export default function DashboardPage() {
     await fetch(`${API}/stop-monitoring`, { method: "POST" });
   }, []);
 
-  const registerBaseline = useCallback((device: BLEDeviceScan) => {
+  const registerBaseline = useCallback((device: BLEDeviceScan, forceDemoOverride = false) => {
     const currentRisk = rows.find((row) => row.address === device.address);
-    if (baselineByAddress.has(device.address.toLowerCase()) && currentRisk && currentRisk.score > 20) {
-      window.alert("Cannot update baseline while device risk score is elevated. Wait for risk to stabilize below 20.");
+    if (currentRisk && currentRisk.score > 20) {
+      window.alert("Cannot save baseline while device risk score is elevated. Wait for risk to stabilize below 20.");
       return;
     }
     const samples = debugEvents.filter((event) => event.address === device.address);
-    if (samples.length === 0) return;
+    if (samples.length < 30) {
+      window.alert("Baseline requires at least 30 samples before saving.");
+      return;
+    }
+    const trainingStart = trainingStartedAt || Math.min(...samples.map((event) => new Date(event.timestamp).getTime()));
+    const trainingDuration = Date.now() - trainingStart;
+    if (trainingDuration < 60000 && !forceDemoOverride) {
+      const confirmed = window.confirm("Baseline training has not reached 60 seconds. Save anyway as a demo override?");
+      if (!confirmed) return;
+    }
+    const highRiskDuringTraining = ledger.some(
+      (entry) =>
+        entry.address === device.address &&
+        new Date(entry.timestamp).getTime() >= trainingStart &&
+        (entry.riskLevel === "High" || entry.riskLevel === "Critical")
+    );
+    if (highRiskDuringTraining) {
+      window.alert("Cannot save baseline because this device had a High or Critical event during training.");
+      return;
+    }
     const rssi = samples.map((event) => event.rssi);
     const frequency = samples.map((event) => event.advertisementFrequency);
     const payload = samples.map((event) => event.payloadLengthApprox);
@@ -237,7 +252,7 @@ export default function DashboardPage() {
     setTrainingAddress("");
     setTrainingStartedAt(null);
     setTrainingProgress(0);
-  }, [baselineByAddress, debugEvents, rows, trustedDevices]);
+  }, [debugEvents, ledger, rows, trainingStartedAt, trustedDevices]);
 
   const ledgerValid = verifyLedger(ledger);
   const changeTheme = () => setThemeState(toggleTheme());
@@ -325,6 +340,13 @@ export default function DashboardPage() {
                 trustedDevices={trustedDevices}
                 runtime={runtime}
                 rows={rows}
+                trainingAddress={trainingAddress}
+                trainingProgress={trainingProgress}
+                onStartTraining={(device) => {
+                  setTrainingAddress(device.address);
+                  setTrainingStartedAt(Date.now());
+                }}
+                onForceSave={(device) => registerBaseline(device, true)}
                 onRecalibrate={registerBaseline}
               />
             )}
@@ -379,13 +401,15 @@ function buildRuntimeAnalysis(events: BLEDeviceScan[]): RuntimeAnalysis {
       frequency: [],
       payloadLength: [],
       serviceUuidCount: [],
-      timestamps: []
+      timestamps: [],
+      anomalyFlags: []
     };
     history.rssi = [...history.rssi, event.rssi].slice(-50);
     history.frequency = [...history.frequency, event.advertisementFrequency].slice(-50);
     history.payloadLength = [...history.payloadLength, event.payloadLengthApprox].slice(-50);
     history.serviceUuidCount = [...history.serviceUuidCount, event.serviceUuidCount].slice(-50);
     history.timestamps = [...history.timestamps, new Date(event.timestamp).getTime()].slice(-300);
+    history.anomalyFlags = [...history.anomalyFlags, isBehavioralEventAnomalous(event, history)].slice(-300);
     histories[event.address] = history;
     latestTimestampByAddress[event.address] = new Date(event.timestamp).getTime();
     latestFingerprintByAddress[event.address] = getFingerprint(event);
@@ -397,19 +421,15 @@ function buildRuntimeAnalysis(events: BLEDeviceScan[]): RuntimeAnalysis {
   });
   const consecutiveAnomalyCount: Record<string, number> = {};
   Object.entries(histories).forEach(([address, history]) => {
-    const burst = scoreTemporalBurst(history.timestamps);
-    const timing = scoreInterArrivalIrregularity(history.timestamps);
-    const trend = scoreRssiTrend(history.rssi);
-    const latestFrequency = history.frequency.at(-1) || 0;
-    const latestPayload = history.payloadLength.at(-1) || 0;
-    const anomalous = burst.score > 0 || timing.score > 0 || trend.score > 0 || latestFrequency > 50 || latestPayload > 200;
-    consecutiveAnomalyCount[address] = anomalous ? Math.min(99, Math.max(1, history.timestamps.length)) : 0;
+    consecutiveAnomalyCount[address] = getTrailingTrueCount(history.anomalyFlags);
   });
 
   const activeCutoff = Date.now() - 30000;
   const addressesByFingerprint: Record<string, string[]> = {};
   Object.entries(latestFingerprintByAddress).forEach(([address, fingerprint]) => {
     if ((latestTimestampByAddress[address] || 0) < activeCutoff) return;
+    const latestEvent = events.findLast((event) => event.address === address);
+    if (!latestEvent || !isMeaningfulFingerprint(latestEvent)) return;
     addressesByFingerprint[fingerprint] = [...(addressesByFingerprint[fingerprint] || []), address];
   });
   const simultaneousDuplicateFingerprints = [
@@ -428,6 +448,43 @@ function buildRuntimeAnalysis(events: BLEDeviceScan[]): RuntimeAnalysis {
     consecutiveAnomalyCount,
     simultaneousDuplicateFingerprints
   };
+}
+
+function isBehavioralEventAnomalous(event: BLEDeviceScan, history: DeviceHistory) {
+  const burst = scoreTemporalBurst(history.timestamps);
+  const timing = scoreInterArrivalIrregularity(history.timestamps);
+  const trend = scoreRssiTrend(history.rssi);
+  const frequencyZ = getZScore(history.frequency, event.advertisementFrequency);
+  const rssiZ = getZScore(history.rssi, event.rssi);
+  return (
+    burst.score > 0 ||
+    timing.score > 0 ||
+    trend.score > 0 ||
+    frequencyZ > 2.0 ||
+    rssiZ > 3.5 ||
+    event.advertisementFrequency > 50 ||
+    event.payloadLengthApprox > 200
+  );
+}
+
+function getTrailingTrueCount(flags: boolean[]) {
+  let count = 0;
+  for (let index = flags.length - 1; index >= 0; index--) {
+    if (!flags[index]) break;
+    count += 1;
+  }
+  return count;
+}
+
+function isMeaningfulFingerprint(device: BLEDeviceScan) {
+  const strongSignals = [
+    device.serviceUuids.length > 0 || device.serviceUuidCount > 0,
+    device.manufacturerDataLength > 0,
+    device.payloadLengthApprox > 0,
+    Boolean(device.deviceTypeGuess),
+    Boolean(device.displayName && !device.displayName.startsWith("BLE Device ("))
+  ];
+  return strongSignals.filter(Boolean).length >= 2;
 }
 
 function average(values: number[]) {
