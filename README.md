@@ -32,7 +32,7 @@ The system is designed for a professional defensive workflow:
 - Maintain a fast dashboard during high-frequency BLE activity.
 - Train trusted baselines from real observed devices.
 - Detect suspicious identity mismatch, unstable fingerprints, unusual advertisement frequency, estimated advertisement size drift, and RSSI behavior changes.
-- Show High and Critical trust violations immediately.
+- Show High and Critical behavioral trust alerts immediately.
 - Record serious incidents in a hash-chain ledger so tampering can be detected.
 
 ## Core Idea
@@ -84,7 +84,7 @@ graph TD
     R -- Low --> S[LiveDevicesTab.tsx<br/>trusted or observing]
     R -- Medium --> T[DashboardTab.tsx<br/>suspicious diagnosis]
     R -- High --> U[AlertBanner.tsx<br/>immediate anomaly alert]
-    R -- Critical --> V[AlertBanner.tsx<br/>trust violation alert]
+    R -- Critical --> V[AlertBanner.tsx<br/>potential trust deviation alert]
 
     U --> W[frontend/lib/hashChain.ts<br/>incident hash chain]
     V --> W
@@ -264,12 +264,12 @@ The dashboard is built around real-time responsiveness:
 - Scanner callbacks schedule async work instead of blocking BLE detection.
 - WebSocket broadcasting uses a bounded queue.
 - Queue pressure drops stale events instead of blocking the scanner.
-- Frontend events are batched before chart and table updates.
+- Frontend events are batched before table, alert, and diagnosis updates.
 - Latest device state is indexed by BLE address.
 - Device rows use stable keys.
 - Recent history is capped to a useful window.
-- Trust violation alerts render immediately.
-- Framer Motion animation does not control alert timing.
+- Potential trust deviation alerts render immediately.
+- Decorative animation is not used in the live alert path.
 - Hash-chain ledger writes do not sit in the critical scanner-to-alert path.
 
 Target behavior on localhost:
