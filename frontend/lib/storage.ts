@@ -26,7 +26,11 @@ function writeArray<T>(key: string, value: T[]) {
 }
 
 export function loadTrustedDevices() {
-  return readArray<TrustedDeviceBaseline>(STORAGE_KEYS.trustedDevices);
+  return readArray<TrustedDeviceBaseline>(STORAGE_KEYS.trustedDevices).map((device) => ({
+    ...device,
+    estimatedAdvertisementSizeMin: device.estimatedAdvertisementSizeMin ?? 0,
+    estimatedAdvertisementSizeMax: device.estimatedAdvertisementSizeMax ?? 0
+  }));
 }
 
 export function saveTrustedDevices(devices: TrustedDeviceBaseline[]) {
@@ -35,7 +39,10 @@ export function saveTrustedDevices(devices: TrustedDeviceBaseline[]) {
 }
 
 export function loadLedgerEntries() {
-  return readArray<LedgerEntry>(STORAGE_KEYS.ledgerEntries);
+  return readArray<LedgerEntry>(STORAGE_KEYS.ledgerEntries).map((entry) => ({
+    ...entry,
+    estimatedAdvertisementSize: entry.estimatedAdvertisementSize ?? 0
+  }));
 }
 
 export function saveLedgerEntries(entries: LedgerEntry[]) {

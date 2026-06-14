@@ -34,17 +34,17 @@ flowchart TD
     A["Select Live Device"] --> B["Start Baseline Training"]
     B --> C["Collect Observations"]
     C --> D["Compute RSSI And Frequency Ranges"]
-    D --> E["Capture Service And Payload Profile"]
+    D --> E["Capture Service And Estimated Size Profile"]
     E --> F["Save Trusted Baseline"]
     F --> G["Use Baseline In Future Risk Decisions"]
 ```
 
-## Trust Violation Path
+## Potential Trust Violation Path
 
 ```mermaid
 flowchart TD
-    A["Known Device Address"] --> B["Live Behavior Changes"]
-    B --> C["RSSI, Frequency, Payload, UUID, Timing, or Fingerprint Drift"]
+    A["Saved Device Baseline"] --> B["Live Behavior Changes"]
+    B --> C["RSSI, Frequency, Estimated Size, UUID, Timing, or Fingerprint Drift"]
     C --> D["Risk Score Crosses High or Critical"]
     D --> E["Solid Alert Banner Updates Immediately"]
     D --> F["Table Row Changes Status"]

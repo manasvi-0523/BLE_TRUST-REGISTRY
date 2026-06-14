@@ -1,6 +1,6 @@
 # BLE Trust Registry
 
-**A real-time Bluetooth Low Energy trust monitoring dashboard for live device observation, trusted baseline comparison, anomaly detection, and tamper-evident incident logging.**
+**A real-time Bluetooth Low Energy monitoring and behavioral trust assessment system for live device observation, trusted baseline comparison, anomaly detection, and tamper-evident incident logging.**
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Scanner%20Backend-green.svg)](https://fastapi.tiangolo.com/)
@@ -31,7 +31,7 @@ The system is designed for a professional defensive workflow:
 - Watch live BLE advertisements without blocking the scanner loop.
 - Maintain a fast dashboard during high-frequency BLE activity.
 - Train trusted baselines from real observed devices.
-- Detect spoofing, identity mismatch, unstable fingerprints, unusual advertisement frequency, payload drift, and RSSI behavior changes.
+- Detect suspicious identity mismatch, unstable fingerprints, unusual advertisement frequency, estimated advertisement size drift, and RSSI behavior changes.
 - Show High and Critical trust violations immediately.
 - Record serious incidents in a hash-chain ledger so tampering can be detected.
 
@@ -61,7 +61,7 @@ graph TD
     C --> D[scanner-backend/models.py<br/>Pydantic scan validation]
     D --> E{Valid event?}
 
-    E -- no --> F[Reject payload<br/>before broadcast]
+    E -- no --> F[Reject invalid event<br/>before broadcast]
     E -- yes --> G[Bounded broadcast queue<br/>drop oldest stale event under pressure]
     G --> H[WebSocket stream<br/>/ws/scan-events]
     A --> I[Status API<br/>/status]
@@ -133,12 +133,12 @@ sequenceDiagram
     participant HC as Hash Chain Ledger
 
     BLE->>S: Advertisement detected
-    S->>S: Extract RSSI, UUIDs, payload, frequency, timestamps
+    S->>S: Extract RSSI, UUIDs, estimated size, frequency, timestamps
     S->>API: Submit structured scan event
     API->>API: Validate event model
-    alt Invalid payload
+    alt Invalid event
         API-->>S: Reject event
-    else Valid payload
+    else Valid event
         API->>WS: Queue latest useful event
     end
     WS->>UI: Send event without blocking scanner
@@ -157,7 +157,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    A[Normalized BLE Event<br/>address, name, RSSI, UUIDs, payload, frequency] --> B{Saved baseline exists?}
+    A[Normalized BLE Event<br/>address, name, RSSI, UUIDs, estimated size, frequency] --> B{Saved baseline exists?}
 
     B -- no --> C[Observation path<br/>unknown device warmup]
     B -- yes --> D[Baseline comparison<br/>trusted device drift checks]
@@ -169,7 +169,7 @@ flowchart TD
     F -- yes --> F1[Add signal risk]
     E --> G{Frequency spike?}
     G -- yes --> G1[Add timing risk]
-    E --> H{Payload or UUID drift?}
+    E --> H{Estimated size or UUID drift?}
     H -- yes --> H1[Add fingerprint risk]
     E --> I{Name or address mismatch?}
     I -- yes --> I1[Add identity risk]
@@ -184,7 +184,7 @@ flowchart TD
     K -- Low --> L[Trusted or Observing]
     K -- Medium --> M[Suspicious]
     K -- High --> N[Anomaly Detected]
-    K -- Critical --> O[Trust Violation]
+    K -- Critical --> O[Potential Trust Violation]
 
     N --> P[Immediate alert]
     O --> P
@@ -200,7 +200,7 @@ The backend listens to the physical BLE environment through the local Bluetooth 
 
 ### 2. Event Extraction Layer
 
-Each detection is converted into a structured scan event. The backend extracts address, RSSI, service UUIDs, manufacturer data length, payload approximation, TX power when available, advertisement type when available, first seen time, last seen time, and rolling advertisement frequency.
+Each detection is converted into a structured scan event. The backend extracts address, RSSI, service UUIDs, manufacturer data length, estimated advertisement size, first seen time, last seen time, and rolling advertisement frequency.
 
 Advertisement frequency is calculated through a rolling per-address window. This is efficient because the scanner only keeps recent timestamps for each address and removes old timestamps outside the active window.
 
@@ -218,7 +218,7 @@ This makes the dashboard usable without pretending that display names are crypto
 
 ### 4. Validation and Broadcast Layer
 
-The backend validates scan events before broadcasting. Invalid payloads are rejected early. Valid events enter a bounded queue used by the WebSocket broadcaster.
+The backend validates scan events before broadcasting. Invalid events are rejected early. Valid events enter a bounded queue used by the WebSocket broadcaster.
 
 The queue is intentionally non-blocking. If BLE events arrive faster than clients can consume them, the system drops the oldest stale event and keeps the newest useful event. This protects the scanner loop and keeps the live dashboard close to real time.
 
@@ -242,7 +242,7 @@ The anomaly engine compares live behavior against trusted baselines and runtime 
 
 - RSSI drift.
 - Advertisement frequency drift.
-- Payload size drift.
+- Estimated advertisement size drift.
 - Service UUID count changes.
 - Timing instability.
 - Fingerprint changes.
@@ -393,10 +393,7 @@ rssi
 serviceUuids
 manufacturerDataLength
 advertisementFrequency
-payloadLengthApprox
-txPower
-advertisementType
-rawAdvertisementDataLength
+estimatedAdvertisementSize
 firstSeenAt
 lastSeenAt
 source
@@ -412,14 +409,14 @@ lastScanTime
 broadcastQueueSize
 ```
 
-## What Counts As A Trust Violation
+## What Counts As A Potential Trust Violation
 
-A trust violation is not based on one weak signal. The system raises serious risk when multiple pieces of evidence point toward identity or behavior drift. Examples include:
+A potential trust violation is not based on one weak signal. The system raises serious risk when multiple pieces of evidence point toward identity or behavior drift. Examples include:
 
 - A trusted device name appears with an unexpected address pattern.
 - A trusted address begins advertising a different name or fingerprint.
 - Advertisement frequency becomes unusually aggressive.
-- Payload length shifts outside the baseline tolerance.
+- Estimated advertisement size shifts outside the baseline tolerance.
 - UUID behavior changes in a way that does not match the saved trusted profile.
 - RSSI and timing behavior support the same suspicious conclusion.
 
@@ -441,7 +438,8 @@ Use this project only in environments where you have permission to monitor BLE d
 | Name | Role | Responsibilities | GitHub | Contact |
 | --- | --- | --- | --- | --- |
 | Manasvi R | Core Developer | Main BLE trust registry development, live dashboard workflow, anomaly workflow, documentation, presentation, and design | [@manasvi-0523](https://github.com/manasvi-0523) | manasvi0523@gmail.com |
-| Mithun Gowda B | Controlled Attack Developer | Controlled BLE spoofing attack setup using Kali Linux, test attack workflow, and attack validation support | [@mithun50](https://github.com/mithun50) | mithungowda.b7411@gmail.com |
+| Mithun Gowda B | Controlled Anomaly Test Developer | Controlled BLE anomaly setup using Kali Linux, test workflow, and validation support | [@mithun50](https://github.com/mithun50) | mithungowda.b7411@gmail.com |
 | Nevil Dsouza | Tester | Testing, validation, issue reporting, and workflow verification | [@nevil06](https://github.com/nevil06) | nevilansondsouza@gmail.com |
 | Manas Habbu | Team Member | Documentation support, presentation support, design assistance, and project coordination | [@Manas-H13](https://github.com/Manas-H13) | manaskiranhabbu@gmail.com |
 | Naren V | Team Member | UI support, interface review, project assistance, and dashboard feedback | [@narenvk-29](https://github.com/narenvk-29) | narenbhaskar2007@gmail.com |
+

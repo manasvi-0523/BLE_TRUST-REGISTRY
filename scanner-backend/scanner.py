@@ -84,11 +84,8 @@ class BLEScannerService:
         device_type_guess = guess_device_type(service_uuids)
         manufacturer_data = getattr(advertisement_data, "manufacturer_data", None) or {}
         manufacturer_length = sum(len(bytes(value)) for value in manufacturer_data.values())
-        payload_length = manufacturer_length + sum(len(str(uuid)) for uuid in service_uuids)
-        tx_power = getattr(advertisement_data, "tx_power", None)
-        platform_data = getattr(advertisement_data, "platform_data", None) or ()
-        advertisement_type = self._advertisement_type(platform_data)
-        raw_advertisement_length = self._raw_advertisement_length(advertisement_data, manufacturer_length, service_uuids)
+        local_name_length = len((advertised_name or "").encode("utf-8"))
+        estimated_advertisement_size = manufacturer_length + local_name_length + sum(len(str(uuid)) for uuid in service_uuids)
 
         event = BLEScanEvent(
             rawName=advertised_name,
@@ -104,10 +101,7 @@ class BLEScannerService:
             serviceUuids=service_uuids,
             manufacturerDataLength=manufacturer_length,
             advertisementFrequency=self._frequency_for(address, now),
-            payloadLengthApprox=payload_length,
-            txPower=float(tx_power) if tx_power is not None else None,
-            advertisementType=advertisement_type,
-            rawAdvertisementDataLength=raw_advertisement_length,
+            estimatedAdvertisementSize=estimated_advertisement_size,
             firstSeenAt=first_seen,
             lastSeenAt=now,
             source="realtime-scanner",
@@ -123,15 +117,3 @@ class BLEScannerService:
             window.popleft()
         return round(len(window) / 10, 1)
 
-    def _advertisement_type(self, platform_data) -> str:
-        for value in platform_data:
-            name = value.__class__.__name__.lower()
-            if "advertisement" in name or "adv" in name:
-                return str(value)
-        return "unknown"
-
-    def _raw_advertisement_length(self, advertisement_data, manufacturer_length: int, service_uuids: list[str]) -> int:
-        service_data = getattr(advertisement_data, "service_data", None) or {}
-        service_data_length = sum(len(bytes(value)) for value in service_data.values())
-        local_name = getattr(advertisement_data, "local_name", None) or ""
-        return manufacturer_length + service_data_length + len(local_name.encode("utf-8")) + sum(len(str(uuid)) for uuid in service_uuids)

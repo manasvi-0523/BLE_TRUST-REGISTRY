@@ -34,7 +34,7 @@ export function BaselineScannerTab({
             <p className="mt-2 text-xs text-[var(--text-secondary)]">Registered {new Date(device.registeredAt).toLocaleString()}</p>
             <Range label="RSSI" min={device.rssiMin} avg={device.averageRssi} max={device.rssiMax} live={live?.rssi} />
             <Range label="Frequency" min={device.frequencyMin} avg={device.averageFrequency} max={device.frequencyMax} live={live?.advertisementFrequency} />
-            <Range label="Payload" min={device.payloadLengthMin} max={device.payloadLengthMax} live={live?.payloadLengthApprox} />
+            <Range label="Estimated size" min={device.estimatedAdvertisementSizeMin} max={device.estimatedAdvertisementSizeMax} live={live?.estimatedAdvertisementSize} />
             <p className="mt-3 text-sm">Service UUID count: {device.serviceUuidCount}{live && live.serviceUuidCount !== device.serviceUuidCount ? " | changed live" : ""}</p>
             <Sparkline values={history?.rssi || []} />
             {live && (
@@ -51,8 +51,8 @@ export function BaselineScannerTab({
       })}
       {trustedDevices.length === 0 && <Card><CardTitle>No Baselines</CardTitle><p className="text-sm text-[var(--text-secondary)]">Register a live device baseline to inspect profiles here.</p></Card>}
       <Card>
-        <CardTitle>Deferred Baseline Fields</CardTitle>
-        <p className="text-sm text-[var(--text-secondary)]">TX Power and advertisement type tracking require backend model changes and are planned for Phase 4.</p>
+        <CardTitle>Behavioral Baseline Fields</CardTitle>
+        <p className="text-sm text-[var(--text-secondary)]">Baselines use RSSI, advertisement frequency, service UUID count, manufacturer data length, and estimated advertisement size.</p>
       </Card>
     </section>
   );
@@ -85,3 +85,5 @@ function Sparkline({ values }: { values: number[] }) {
     </svg>
   );
 }
+
+

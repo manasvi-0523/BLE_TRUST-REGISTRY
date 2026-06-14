@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 
-ScanSource = Literal["realtime-scanner", "controlled-kali-test", "demo-backup"]
+ScanSource = Literal["realtime-scanner", "controlled-anomaly-test", "demo-backup"]
 NameSource = Literal[
     "advertised",
     "cache",
@@ -29,10 +29,7 @@ class BLEScanEvent(BaseModel):
     serviceUuids: list[str] = []
     manufacturerDataLength: int = Field(ge=0)
     advertisementFrequency: float = Field(ge=0)
-    payloadLengthApprox: int = Field(ge=0)
-    txPower: float | None = None
-    advertisementType: str | None = None
-    rawAdvertisementDataLength: int | None = Field(default=None, ge=0)
+    estimatedAdvertisementSize: int = Field(ge=0)
     firstSeenAt: datetime | None = None
     lastSeenAt: datetime | None = None
     source: ScanSource

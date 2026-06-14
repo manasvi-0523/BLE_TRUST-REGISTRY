@@ -1,6 +1,6 @@
 # Architecture
 
-BLE Trust Registry is split into two focused systems: a scanner backend that observes and validates BLE events, and a frontend console that renders the live security state without blocking the user interface.
+BLE Trust Registry is split into two focused systems: a scanner backend that observes and validates BLE events, and a frontend console that renders the live behavioral trust state without blocking the user interface.
 
 ## System Map
 
@@ -48,10 +48,10 @@ flowchart TB
 
 - Run BLE scanning asynchronously.
 - Resolve practical display names for devices.
-- Extract RSSI, advertisement frequency, service UUID count, manufacturer data length, and payload size.
-- Validate payloads before broadcasting.
+- Extract RSSI, advertisement frequency, service UUID count, manufacturer data length, and estimated advertisement size.
+- Validate scan events before broadcasting.
 - Broadcast scan events without blocking the scanner loop.
-- Reject malformed controlled test payloads with validation errors.
+- Reject malformed controlled anomaly test events with validation errors.
 
 ## Frontend Responsibilities
 

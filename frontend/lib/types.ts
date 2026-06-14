@@ -1,4 +1,4 @@
-export type EventSource = "realtime-scanner" | "controlled-kali-test" | "demo-backup";
+export type EventSource = "realtime-scanner" | "controlled-anomaly-test" | "demo-backup";
 
 export type NameSource =
   | "advertised"
@@ -22,10 +22,7 @@ export type BLEDeviceScan = {
   serviceUuids: string[];
   manufacturerDataLength: number;
   advertisementFrequency: number;
-  payloadLengthApprox: number;
-  txPower?: number | null;
-  advertisementType?: string | null;
-  rawAdvertisementDataLength?: number | null;
+  estimatedAdvertisementSize: number;
   firstSeenAt?: string | null;
   lastSeenAt?: string | null;
   source: EventSource;
@@ -42,8 +39,8 @@ export type TrustedDeviceBaseline = {
   frequencyMax: number;
   averageFrequency: number;
   serviceUuidCount: number;
-  payloadLengthMin: number;
-  payloadLengthMax: number;
+  estimatedAdvertisementSizeMin: number;
+  estimatedAdvertisementSizeMax: number;
   registeredAt: string;
   trustLabel: "Trusted";
 };
@@ -57,14 +54,14 @@ export type Prediction =
   | "Needs Review"
   | "Suspicious"
   | "Anomaly Detected"
-  | "Trust Violation";
+  | "Potential Trust Violation";
 
 export type TrustStatus =
   | "Trusted"
   | "Observing"
   | "Unregistered"
   | "Suspicious"
-  | "Trust Violated";
+  | "Potential Trust Deviation";
 
 export type RiskResult = {
   score: number;
@@ -84,7 +81,7 @@ export type LedgerEntry = {
   rssi: number;
   advertisementFrequency: number;
   serviceUuidCount: number;
-  payloadLengthApprox: number;
+  estimatedAdvertisementSize: number;
   riskScore: number;
   riskLevel: RiskLevel;
   prediction: Prediction;
@@ -100,7 +97,7 @@ export type MonitoringState =
   | "MONITORING_ACTIVE"
   | "BASELINE_TRAINING"
   | "SUSPICIOUS_ACTIVITY"
-  | "TRUST_VIOLATION_DETECTED"
+  | "POTENTIAL_TRUST_DEVIATION"
   | "BACKEND_DISCONNECTED";
 
 export type ConnectionState = "Disconnected" | "Reconnecting" | "Connected";
@@ -108,7 +105,7 @@ export type ConnectionState = "Disconnected" | "Reconnecting" | "Connected";
 export type DeviceHistory = {
   rssi: number[];
   frequency: number[];
-  payloadLength: number[];
+  estimatedAdvertisementSizes: number[];
   serviceUuidCount: number[];
   timestamps: number[];
   anomalyFlags: boolean[];
@@ -124,7 +121,7 @@ export type RuntimeAnalysis = {
 };
 
 export type AuthenticityResult = {
-  status: "Passed" | "Failed" | "No Baseline - Cannot Verify";
+  status: "Consistent" | "Deviation" | "No Baseline";
   reason: string;
   checks: Array<{
     label: string;

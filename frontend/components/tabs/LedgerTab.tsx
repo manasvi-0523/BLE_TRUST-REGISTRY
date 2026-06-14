@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Card, CardTitle } from "@/components/ui/card";
 import type { LedgerEntry } from "@/lib/types";
 
-export function BlockchainTab({ ledger, ledgerValid }: { ledger: LedgerEntry[]; ledgerValid: boolean }) {
+export function LedgerTab({ ledger, ledgerValid }: { ledger: LedgerEntry[]; ledgerValid: boolean }) {
   const [selectedHash, setSelectedHash] = useState("");
   const selected = ledger.find((entry) => entry.currentHash === selectedHash) || ledger.at(-1) || null;
 
@@ -49,4 +49,3 @@ export function BlockchainTab({ ledger, ledgerValid }: { ledger: LedgerEntry[]; 
     </section>
   );
 }
-

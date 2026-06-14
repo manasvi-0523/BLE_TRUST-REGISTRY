@@ -54,7 +54,7 @@ http://localhost:3000
 
 Then reload the dashboard. The frontend also normalizes older event shapes to avoid crashes from missing optional fields.
 
-## Backend Rejects Controlled Test Payload
+## Backend Rejects Controlled Anomaly Test Event
 
 `POST /scan-event` uses Pydantic validation. Missing required fields or invalid types return `422`.
 
@@ -72,7 +72,8 @@ Minimum required shape:
   "serviceUuids": ["180f"],
   "manufacturerDataLength": 4,
   "advertisementFrequency": 3.2,
-  "payloadLengthApprox": 22,
-  "source": "controlled-kali-test"
+  "estimatedAdvertisementSize": 22,
+  "source": "controlled-anomaly-test"
 }
 ```
+

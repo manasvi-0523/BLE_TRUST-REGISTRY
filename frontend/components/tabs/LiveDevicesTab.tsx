@@ -30,7 +30,7 @@ export function LiveDevicesTab({
         <colgroup>{widths.map((width) => <col key={width} style={{ width }} />)}</colgroup>
         <thead className="bg-[var(--bg-card-elevated)] text-[var(--text-secondary)]">
           <tr>
-            {["Display Name", "Address", "Name", "RSSI", "Freq", "Svc", "Payload", "Source", "Trust", "Risk", "Prediction", "Reason"].map((header) => (
+            {["Display Name", "Address", "Name", "RSSI", "Freq", "Svc", "Est Size", "Source", "Trust", "Risk", "Prediction", "Reason"].map((header) => (
               <th key={header} className="border-b border-[var(--border-color)] px-2 py-2 font-medium">{header}</th>
             ))}
           </tr>
@@ -51,7 +51,7 @@ export function LiveDevicesTab({
                 <TruncatedCell>{row.rssi}</TruncatedCell>
                 <TruncatedCell>{row.advertisementFrequency.toFixed(1)}</TruncatedCell>
                 <TruncatedCell>{row.serviceUuidCount}</TruncatedCell>
-                <TruncatedCell>{row.payloadLengthApprox}</TruncatedCell>
+                <TruncatedCell>{row.estimatedAdvertisementSize}</TruncatedCell>
                 <TruncatedCell>{row.source}</TruncatedCell>
                 <TruncatedCell title={`${row.trustStatus} | Trust ${row.trustScore}`}>
                   <TrustBadge status={row.trustStatus} /> <span className="ml-1">{row.trustScore}</span>
@@ -106,3 +106,4 @@ export function LiveDevicesTab({
     </section>
   );
 }
+

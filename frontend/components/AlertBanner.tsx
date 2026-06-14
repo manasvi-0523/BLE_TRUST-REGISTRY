@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import type { RiskResult, BLEDeviceScan } from "@/lib/types";
 
 export function AlertBanner({
@@ -18,10 +17,7 @@ export function AlertBanner({
         : "red";
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
+    <div
       className={
         state === "red"
           ? "rounded-xl border border-red-800 bg-red-950 p-4 text-red-100 dark:bg-red-950"
@@ -32,20 +28,20 @@ export function AlertBanner({
     >
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] opacity-75">Trust Violation Alert Bar</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] opacity-75">Behavioral Trust Alert Bar</p>
           <h1 className="mt-1 text-2xl font-bold">
             {state === "red"
-              ? "TRUST VIOLATION DETECTED"
+              ? "Potential Trust Deviation"
               : state === "yellow"
-                ? "Suspicious BLE Activity"
-                : "System Secure"}
+                ? "Suspicious BLE Behavior"
+                : "Monitoring Stable"}
           </h1>
           <p className="text-sm opacity-80">
             {state === "red"
-              ? "Possible BLE spoofing/anomaly found near your device."
+              ? "Multiple behavior signals indicate a possible trust violation. Review before taking action."
               : state === "yellow"
-                ? "Unusual BLE behavior found. Continue monitoring."
-                : "No suspicious BLE behavior detected."}
+                ? "Unusual BLE behavior found. Continue monitoring and compare against the baseline."
+                : "No suspicious BLE behavior is currently active."}
           </p>
         </div>
         {state === "red" && assessment && device && (
@@ -57,6 +53,6 @@ export function AlertBanner({
           </div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }

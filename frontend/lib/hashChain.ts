@@ -16,7 +16,7 @@ export function createLedgerEntry(
     rssi: device.rssi,
     advertisementFrequency: device.advertisementFrequency,
     serviceUuidCount: device.serviceUuidCount,
-    payloadLengthApprox: device.payloadLengthApprox,
+    estimatedAdvertisementSize: device.estimatedAdvertisementSize,
     riskScore: assessment.score,
     riskLevel: assessment.riskLevel,
     prediction: assessment.prediction,
@@ -57,3 +57,4 @@ function hashEntryInput(entry: Omit<LedgerEntry, "currentHash"> | LedgerEntry) {
 
   return sha256(hashInput);
 }
+

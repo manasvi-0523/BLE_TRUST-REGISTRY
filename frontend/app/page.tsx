@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Moon, Sun } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
 import { AlertBanner } from "@/components/AlertBanner";
 import { AlertsTab } from "@/components/tabs/AlertsTab";
-import { AttackLabTab } from "@/components/tabs/AttackLabTab";
+import { AnomalyLabTab } from "@/components/tabs/AnomalyLabTab";
 import { BaselineScannerTab } from "@/components/tabs/BaselineScannerTab";
-import { BlockchainTab } from "@/components/tabs/BlockchainTab";
 import { DashboardTab } from "@/components/tabs/DashboardTab";
+import { LedgerTab } from "@/components/tabs/LedgerTab";
 import { LiveDevicesTab } from "@/components/tabs/LiveDevicesTab";
 import type { DeviceRow } from "@/components/tabs/types";
 import { calculateRiskScore } from "@/lib/anomalyEngine";
@@ -39,18 +38,19 @@ const API = process.env.NEXT_PUBLIC_SCANNER_API || "http://127.0.0.1:8000";
 const WS = process.env.NEXT_PUBLIC_SCANNER_WS || "ws://127.0.0.1:8000/ws/scan-events";
 const MAX_DEBUG_EVENTS = 300;
 
-type IncomingScanEvent = Partial<BLEDeviceScan> & {
+type IncomingScanEvent = Omit<Partial<BLEDeviceScan>, "source"> & {
   name?: string | null;
   localName?: string | null;
+  source?: BLEDeviceScan["source"];
 };
-type TabId = "dashboard" | "devices" | "blockchain" | "alerts" | "attack-lab" | "baselines";
+type TabId = "dashboard" | "devices" | "ledger" | "alerts" | "anomaly-lab" | "baselines";
 
 const tabs: Array<{ id: TabId; label: string }> = [
   { id: "dashboard", label: "Dashboard" },
   { id: "devices", label: "Live Devices" },
-  { id: "blockchain", label: "Blockchain" },
+  { id: "ledger", label: "Ledger" },
   { id: "alerts", label: "Alerts" },
-  { id: "attack-lab", label: "Attack Lab" },
+  { id: "anomaly-lab", label: "Anomaly Lab" },
   { id: "baselines", label: "Baseline Scanner" }
 ];
 
@@ -167,7 +167,7 @@ export default function DashboardPage() {
       setMonitoringState("MONITORING_ACTIVE");
       return;
     }
-    if (highestActive.riskLevel === "Critical") setMonitoringState("TRUST_VIOLATION_DETECTED");
+    if (highestActive.riskLevel === "Critical") setMonitoringState("POTENTIAL_TRUST_DEVIATION");
     else if (highestActive.riskLevel === "High" || highestActive.riskLevel === "Medium") setMonitoringState("SUSPICIOUS_ACTIVITY");
     else setMonitoringState("MONITORING_ACTIVE");
   }, [connection, highestActive, scannerStatus.running]);
@@ -230,7 +230,7 @@ export default function DashboardPage() {
     }
     const rssi = samples.map((event) => event.rssi);
     const frequency = samples.map((event) => event.advertisementFrequency);
-    const payload = samples.map((event) => event.payloadLengthApprox);
+    const estimatedSizes = samples.map((event) => event.estimatedAdvertisementSize);
     const baseline: TrustedDeviceBaseline = {
       deviceName: device.deviceName,
       displayName: device.displayName,
@@ -242,8 +242,8 @@ export default function DashboardPage() {
       frequencyMax: Math.max(...frequency),
       averageFrequency: average(frequency),
       serviceUuidCount: device.serviceUuidCount,
-      payloadLengthMin: Math.min(...payload),
-      payloadLengthMax: Math.max(...payload),
+      estimatedAdvertisementSizeMin: Math.min(...estimatedSizes),
+      estimatedAdvertisementSizeMax: Math.max(...estimatedSizes),
       registeredAt: new Date().toISOString(),
       trustLabel: "Trusted"
     };
@@ -303,14 +303,7 @@ export default function DashboardPage() {
           </section>
         )}
 
-        <AnimatePresence mode="wait">
-          <motion.section
-            key={activeTab}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.18 }}
-          >
+        <section key={activeTab}>
             {activeTab === "dashboard" && (
               <DashboardTab
                 rows={rows}
@@ -333,9 +326,9 @@ export default function DashboardPage() {
                 onRegister={registerBaseline}
               />
             )}
-            {activeTab === "blockchain" && <BlockchainTab ledger={ledger} ledgerValid={ledgerValid} />}
+            {activeTab === "ledger" && <LedgerTab ledger={ledger} ledgerValid={ledgerValid} />}
             {activeTab === "alerts" && <AlertsTab ledger={ledger} />}
-            {activeTab === "attack-lab" && <AttackLabTab ledger={ledger} />}
+            {activeTab === "anomaly-lab" && <AnomalyLabTab ledger={ledger} />}
             {activeTab === "baselines" && (
               <BaselineScannerTab
                 trustedDevices={trustedDevices}
@@ -351,8 +344,7 @@ export default function DashboardPage() {
                 onRecalibrate={registerBaseline}
               />
             )}
-          </motion.section>
-        </AnimatePresence>
+        </section>
       </div>
     </main>
   );
@@ -373,10 +365,7 @@ function normalizeEvent(event: IncomingScanEvent): BLEDeviceScan {
     rssi: Number(event.rssi ?? -100),
     advertisementFrequency: Number(event.advertisementFrequency ?? 0),
     manufacturerDataLength: Number(event.manufacturerDataLength ?? 0),
-    payloadLengthApprox: Number(event.payloadLengthApprox ?? 0),
-    txPower: event.txPower ?? null,
-    advertisementType: event.advertisementType ?? null,
-    rawAdvertisementDataLength: event.rawAdvertisementDataLength ?? null,
+    estimatedAdvertisementSize: Number(event.estimatedAdvertisementSize ?? 0),
     firstSeenAt: event.firstSeenAt ?? null,
     lastSeenAt: event.lastSeenAt ?? null,
     serviceUuidCount: Number(event.serviceUuidCount ?? event.serviceUuids?.length ?? 0),
@@ -405,14 +394,14 @@ function buildRuntimeAnalysis(events: BLEDeviceScan[]): RuntimeAnalysis {
     const history = histories[event.address] || {
       rssi: [],
       frequency: [],
-      payloadLength: [],
+      estimatedAdvertisementSizes: [],
       serviceUuidCount: [],
       timestamps: [],
       anomalyFlags: []
     };
     history.rssi = [...history.rssi, event.rssi].slice(-50);
     history.frequency = [...history.frequency, event.advertisementFrequency].slice(-50);
-    history.payloadLength = [...history.payloadLength, event.payloadLengthApprox].slice(-50);
+    history.estimatedAdvertisementSizes = [...history.estimatedAdvertisementSizes, event.estimatedAdvertisementSize].slice(-50);
     history.serviceUuidCount = [...history.serviceUuidCount, event.serviceUuidCount].slice(-50);
     history.timestamps = [...history.timestamps, new Date(event.timestamp).getTime()].slice(-300);
     history.anomalyFlags = [...history.anomalyFlags, isBehavioralEventAnomalous(event, history)].slice(-300);
@@ -469,7 +458,7 @@ function isBehavioralEventAnomalous(event: BLEDeviceScan, history: DeviceHistory
     frequencyZ > 2.0 ||
     rssiZ > 3.5 ||
     event.advertisementFrequency > 50 ||
-    event.payloadLengthApprox > 200
+    event.estimatedAdvertisementSize > 200
   );
 }
 
@@ -486,7 +475,7 @@ function isMeaningfulFingerprint(device: BLEDeviceScan) {
   const strongSignals = [
     device.serviceUuids.length > 0 || device.serviceUuidCount > 0,
     device.manufacturerDataLength > 0,
-    device.payloadLengthApprox > 0,
+    device.estimatedAdvertisementSize > 0,
     Boolean(device.deviceTypeGuess),
     Boolean(device.displayName && !device.displayName.startsWith("BLE Device ("))
   ];

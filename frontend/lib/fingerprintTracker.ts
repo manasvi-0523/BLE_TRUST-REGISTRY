@@ -4,7 +4,7 @@ export function getFingerprint(device: BLEDeviceScan) {
   return [
     device.serviceUuidCount,
     Math.round(device.manufacturerDataLength / 4) * 4,
-    Math.round(device.payloadLengthApprox / 4) * 4,
+    Math.round(device.estimatedAdvertisementSize / 4) * 4,
     device.nameSource ?? "unknown"
   ].join("|");
 }
@@ -27,3 +27,4 @@ export function isMeaningfulName(name?: string | null) {
   const normalized = name.trim().toLowerCase();
   return Boolean(normalized) && !generic.includes(normalized) && !normalized.startsWith("ble device (");
 }
+

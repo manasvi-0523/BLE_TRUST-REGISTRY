@@ -7,7 +7,7 @@ export function TrustBadge({ status }: { status: TrustStatus }) {
       ? "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800"
       : status === "Suspicious"
         ? "bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800"
-        : status === "Trust Violated"
+        : status === "Potential Trust Deviation"
           ? "bg-red-100 text-red-900 border-red-300 dark:bg-red-950 dark:text-red-300 dark:border-red-800"
           : "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
   return <span className={`inline-flex rounded border px-2 py-1 text-xs ${classes}`}>{status}</span>;
@@ -25,7 +25,7 @@ export function Gauge({ value, label }: { value: number; label: string }) {
       </div>
       <div>
         <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
-        <p className="text-sm text-[var(--text-secondary)]">{value >= 80 ? "Secure Environment" : value >= 55 ? "Elevated Risk" : "Active Threat Detected"}</p>
+        <p className="text-sm text-[var(--text-secondary)]">{value >= 80 ? "Stable Environment" : value >= 55 ? "Elevated Risk" : "High Behavioral Risk"}</p>
       </div>
     </div>
   );

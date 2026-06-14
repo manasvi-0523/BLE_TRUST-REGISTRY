@@ -89,8 +89,8 @@ export function verifyAuthenticity(
 ): AuthenticityResult {
   if (!baselineOrNull) {
     return {
-      status: "No Baseline - Cannot Verify",
-      reason: "Register this device to perform authenticity verification.",
+      status: "No Baseline",
+      reason: "Register this device to perform behavioral authenticity assessment.",
       checks: [{ label: "Baseline", registered: "None", live: device.address, result: "Skipped" }]
     };
   }
@@ -125,12 +125,12 @@ export function verifyAuthenticity(
       result: device.serviceUuidCount === baselineOrNull.serviceUuidCount ? "Passed" : "Failed"
     },
     {
-      label: "Payload range",
-      registered: `${baselineOrNull.payloadLengthMin}-${baselineOrNull.payloadLengthMax}`,
-      live: String(device.payloadLengthApprox),
+      label: "Estimated advertisement size",
+      registered: `${baselineOrNull.estimatedAdvertisementSizeMin}-${baselineOrNull.estimatedAdvertisementSizeMax}`,
+      live: String(device.estimatedAdvertisementSize),
       result:
-        device.payloadLengthApprox >= baselineOrNull.payloadLengthMin &&
-        device.payloadLengthApprox <= baselineOrNull.payloadLengthMax
+        device.estimatedAdvertisementSize >= baselineOrNull.estimatedAdvertisementSizeMin &&
+        device.estimatedAdvertisementSize <= baselineOrNull.estimatedAdvertisementSizeMax
           ? "Passed"
           : "Failed"
     }
@@ -138,8 +138,8 @@ export function verifyAuthenticity(
 
   const failed = checks.filter((check) => check.result === "Failed");
   return {
-    status: failed.length ? "Failed" : "Passed",
-    reason: failed.length ? "One or more live fields deviate from the trusted baseline." : "Live behavior matches the trusted baseline.",
+    status: failed.length ? "Deviation" : "Consistent",
+    reason: failed.length ? "One or more live behavior fields deviate from the trusted baseline." : "Live behavior is consistent with the trusted baseline.",
     checks
   };
 }
@@ -157,7 +157,7 @@ export function calculateRiskScore(
   const history = runtime.histories[device.address] || {
     rssi: [],
     frequency: [],
-    payloadLength: [],
+    estimatedAdvertisementSizes: [],
     serviceUuidCount: [],
     timestamps: [],
     anomalyFlags: []
@@ -237,19 +237,19 @@ export function calculateRiskScore(
     }
     score += capContribution(rssiScore, 20);
 
-    let payloadScore = 0;
-    const payloadZ = getZScore(history.payloadLength, device.payloadLengthApprox);
-    if (payloadZ > 3.0) {
+    let sizeScore = 0;
+    const sizeZ = getZScore(history.estimatedAdvertisementSizes, device.estimatedAdvertisementSize);
+    if (sizeZ > 3.0) {
       hasBaselineDeviation = true;
-      payloadScore += 15;
-      reasons.push(`Payload length deviation z-score: ${payloadZ.toFixed(1)}.`);
+      sizeScore += 15;
+      reasons.push(`Estimated advertisement size deviation z-score: ${sizeZ.toFixed(1)}.`);
     }
-    if (device.payloadLengthApprox < baselineOrNull.payloadLengthMin || device.payloadLengthApprox > baselineOrNull.payloadLengthMax) {
+    if (device.estimatedAdvertisementSize < baselineOrNull.estimatedAdvertisementSizeMin || device.estimatedAdvertisementSize > baselineOrNull.estimatedAdvertisementSizeMax) {
       hasBaselineDeviation = true;
-      payloadScore += 15;
-      reasons.push("Payload length is outside the trusted baseline range.");
+      sizeScore += 15;
+      reasons.push("Estimated advertisement size is outside the trusted baseline range.");
     }
-    score += capContribution(payloadScore, 25);
+    score += capContribution(sizeScore, 25);
 
     let serviceScore = 0;
     const serviceZ = getZScore(history.serviceUuidCount, device.serviceUuidCount);
@@ -266,11 +266,11 @@ export function calculateRiskScore(
     score += capContribution(serviceScore, 25);
   } else {
     reasons.push("No trusted baseline exists. No abnormal BLE behavior detected.");
-    if (device.source === "controlled-kali-test") {
+    if (device.source === "controlled-anomaly-test") {
       score += 25;
-      reasons.push("Controlled test source reported this event for review.");
+      reasons.push("Controlled anomaly test source reported this event for review.");
     }
-    if (device.advertisementFrequency > 50 || device.payloadLengthApprox > 200) {
+    if (device.advertisementFrequency > 50 || device.estimatedAdvertisementSize > 200) {
       score += 25;
       reasons.push("Extreme broad sanity check exceeded normal BLE observation bounds.");
     }
@@ -326,7 +326,7 @@ export function calculateRiskScore(
 }
 
 function getPrediction(riskLevel: RiskLevel, hasBaseline: boolean, warmedUp: boolean): Prediction {
-  if (riskLevel === "Critical") return "Trust Violation";
+  if (riskLevel === "Critical") return "Potential Trust Violation";
   if (riskLevel === "High") return "Anomaly Detected";
   if (riskLevel === "Medium") return "Needs Review";
   if (!hasBaseline && !warmedUp) return "Observing";
@@ -335,7 +335,7 @@ function getPrediction(riskLevel: RiskLevel, hasBaseline: boolean, warmedUp: boo
 }
 
 function getTrustStatus(riskLevel: RiskLevel, hasBaseline: boolean, warmedUp: boolean): TrustStatus {
-  if (riskLevel === "Critical") return "Trust Violated";
+  if (riskLevel === "Critical") return "Potential Trust Deviation";
   if (riskLevel === "High" || riskLevel === "Medium") return "Suspicious";
   if (hasBaseline) return "Trusted";
   if (!warmedUp) return "Observing";
@@ -343,7 +343,7 @@ function getTrustStatus(riskLevel: RiskLevel, hasBaseline: boolean, warmedUp: bo
 }
 
 function getRecommendedAction(trustStatus: TrustStatus) {
-  if (trustStatus === "Trust Violated") return "Avoid pairing, disconnect if connected, and inspect the ledger.";
+  if (trustStatus === "Potential Trust Deviation") return "Avoid pairing, disconnect if connected, and inspect the ledger evidence.";
   if (trustStatus === "Suspicious") return "Continue monitoring and verify the device manually.";
   if (trustStatus === "Unregistered" || trustStatus === "Observing") return "Register a baseline if this is your device.";
   return "No action required.";
