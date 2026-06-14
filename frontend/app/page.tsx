@@ -138,15 +138,19 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    const interval = window.setInterval(async () => {
+    const pollStatus = async () => {
       try {
         const response = await fetch(`${API}/status`);
+        if (!response.ok) throw new Error(`status ${response.status}`);
         const status = await response.json();
         setScannerStatus(status);
+        setConnection((current) => (current === "Disconnected" ? "Connected" : current));
       } catch {
         setConnection("Disconnected");
       }
-    }, 2500);
+    };
+    pollStatus();
+    const interval = window.setInterval(pollStatus, 2500);
     return () => window.clearInterval(interval);
   }, []);
 
@@ -203,16 +207,23 @@ export default function DashboardPage() {
 
   const registerBaseline = useCallback((device: BLEDeviceScan, forceDemoOverride = false) => {
     const currentRisk = rows.find((row) => row.address === device.address);
-    if (currentRisk && currentRisk.score > 20) {
-      window.alert("Cannot save baseline while device risk score is elevated. Wait for risk to stabilize below 20.");
+    if (currentRisk && (currentRisk.riskLevel === "High" || currentRisk.riskLevel === "Critical")) {
+      window.alert("Cannot save baseline while this device is High or Critical risk. Keep monitoring until the high-risk evidence clears.");
       return;
     }
-    const samples = debugEvents.filter((event) => event.address === device.address);
+    if (currentRisk?.riskLevel === "Medium" && !forceDemoOverride) {
+      const confirmed = window.confirm("This device is currently Medium risk. Save a recalibrated baseline only if you physically trust this device and it is behaving normally.");
+      if (!confirmed) return;
+    }
+    const allSamples = debugEvents.filter((event) => event.address === device.address);
+    const trainingStart = trainingStartedAt || Date.now() - 60000;
+    const samples = allSamples
+      .filter((event) => new Date(event.timestamp).getTime() >= trainingStart)
+      .slice(-120);
     if (samples.length < 30) {
-      window.alert("Baseline requires at least 30 samples before saving.");
+      window.alert("Baseline requires at least 30 recent samples before saving. Keep monitoring this device for a little longer.");
       return;
     }
-    const trainingStart = trainingStartedAt || Math.min(...samples.map((event) => new Date(event.timestamp).getTime()));
     const trainingDuration = Date.now() - trainingStart;
     if (trainingDuration < 60000 && !forceDemoOverride) {
       const confirmed = window.confirm("Baseline training has not reached 60 seconds. Save anyway as a demo override?");
@@ -250,6 +261,8 @@ export default function DashboardPage() {
     const next = [...trustedDevices.filter((item) => item.address !== device.address), baseline];
     setTrustedDevices(next);
     saveTrustedDevices(next);
+    setDebugEvents((events) => events.filter((event) => event.address !== device.address).concat(samples.slice(-5)));
+    delete lastAlertedRef.current[device.address];
     setTrainingAddress("");
     setTrainingStartedAt(null);
     setTrainingProgress(0);

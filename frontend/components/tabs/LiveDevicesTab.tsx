@@ -18,7 +18,7 @@ export function LiveDevicesTab({
   onRegister: (device: BLEDeviceScan) => void;
 }) {
   const [expanded, setExpanded] = useState("");
-  const widths = ["14%", "13%", "7%", "5%", "6%", "5%", "6%", "8%", "9%", "7%", "9%", "11%"];
+  const columnWidths = ["14%", "13%", "7%", "5%", "6%", "5%", "6%", "8%", "9%", "7%", "9%", "11%"];
 
   return (
     <section className="surface overflow-hidden rounded-xl">
@@ -27,7 +27,7 @@ export function LiveDevicesTab({
         <p className="text-xs text-[var(--text-secondary)]">Fixed layout table. Click a row to expand diagnosis evidence.</p>
       </div>
       <table className="w-full table-fixed border-collapse text-left text-xs">
-        <colgroup>{widths.map((width) => <col key={width} style={{ width }} />)}</colgroup>
+        <colgroup>{columnWidths.map((width, index) => <col key={`device-column-${index}`} style={{ width }} />)}</colgroup>
         <thead className="bg-[var(--bg-card-elevated)] text-[var(--text-secondary)]">
           <tr>
             {["Display Name", "Address", "Name", "RSSI", "Freq", "Svc", "Est Size", "Source", "Trust", "Risk", "Prediction", "Reason"].map((header) => (
@@ -75,7 +75,7 @@ export function LiveDevicesTab({
                       <div>
                         <p className="font-semibold">Evidence</p>
                         <ul className="mt-1 list-disc space-y-1 pl-5 text-[var(--text-secondary)]">
-                          {row.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+                          {row.reasons.map((reason, index) => <li key={`${row.address}-reason-${index}`}>{reason}</li>)}
                         </ul>
                       </div>
                       <div>

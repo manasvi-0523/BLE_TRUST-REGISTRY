@@ -61,12 +61,11 @@ export function DashboardTab({
       <div className="grid gap-4">
         <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <Stat label="Monitoring" value={monitoringState} />
-          <Stat label="Backend" value={connection} />
+          <Stat label="Backend" value={connection} detail={`Queue ${scannerStatus.broadcastQueueSize ?? 0}`} />
           <Stat label="Scanner" value={scannerStatus.running ? "Running" : "Stopped"} />
           <Stat label="Devices" value={String(rows.length)} />
           <Stat label="Baselines" value={String(trustedDevices.length)} />
           <Stat label="Ledger" value={ledgerValid ? "Valid" : "Invalid"} />
-          <Stat label="Queue" value={String(scannerStatus.broadcastQueueSize ?? 0)} />
         </section>
 
         <Card>
@@ -89,11 +88,14 @@ export function DashboardTab({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
     <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-card-elevated)] px-3 py-3">
       <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold text-[var(--text-primary)]">{value}</p>
+      <div className="mt-1 flex min-h-5 items-center justify-between gap-2">
+        <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{value}</p>
+        {detail && <p className="shrink-0 text-xs text-[var(--text-muted)]">{detail}</p>}
+      </div>
     </div>
   );
 }
