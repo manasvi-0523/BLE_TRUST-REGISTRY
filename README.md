@@ -435,11 +435,11 @@ Use this project only in environments where you have permission to monitor BLE d
 
 ## Contributors
 
-| Name | Role | Responsibilities | GitHub | Contact |
-| --- | --- | --- | --- | --- |
-| Manasvi R | Core Developer | Main BLE trust registry development, live dashboard workflow, anomaly workflow, documentation, presentation, and design | [@manasvi-0523](https://github.com/manasvi-0523) | manasvi0523@gmail.com |
-| Mithun Gowda B | Controlled Anomaly Test Developer | Controlled BLE anomaly setup using Kali Linux, test workflow, and validation support | [@mithun50](https://github.com/mithun50) | mithungowda.b7411@gmail.com |
-| Nevil Dsouza | Tester | Testing, validation, issue reporting, and workflow verification | [@nevil06](https://github.com/nevil06) | nevilansondsouza@gmail.com |
-| Manas Habbu | Team Member | Documentation support, presentation support, design assistance, and project coordination | [@Manas-H13](https://github.com/Manas-H13) | manaskiranhabbu@gmail.com |
-| Naren V | Team Member | UI support, interface review, project assistance, and dashboard feedback | [@narenvk-29](https://github.com/narenvk-29) | narenbhaskar2007@gmail.com |
+| Name | Role |  GitHub | Contact |
+| --- | --- | --- | --- |
+| Manasvi R | Core Developer | [@manasvi-0523](https://github.com/manasvi-0523) | manasvi0523@gmail.com |
+| Mithun Gowda B | Controlled Anomaly Test Developer | [@mithun50](https://github.com/mithun50) | mithungowda.b7411@gmail.com |
+| Nevil Dsouza | Tester | [@nevil06](https://github.com/nevil06) | nevilansondsouza@gmail.com |
+| Manas Habbu | Team Member | [@Manas-H13](https://github.com/Manas-H13) | manaskiranhabbu@gmail.com |
+| Naren V | Team Member | [@narenvk-29](https://github.com/narenvk-29) | narenbhaskar2007@gmail.com |
 
