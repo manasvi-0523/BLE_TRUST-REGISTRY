@@ -443,3 +443,5 @@ Use this project only in environments where you have permission to monitor BLE d
 | Manas Habbu | Team Member | [@Manas-H13](https://github.com/Manas-H13) | manaskiranhabbu@gmail.com |
 | Naren V | Team Member | [@narenvk-29](https://github.com/narenvk-29) | narenbhaskar2007@gmail.com |
 
+## Disclaimer
+Use this only on networks and devices you own or have explicit permission to monitor. Passive BLE scanning may be subject to local regulations on radio monitoring and data collection in some jurisdictions. The authors take no responsibility for misuse.
