@@ -35,3 +35,13 @@ backup_docs/
 # Cleanup documentation (temporary)
 CLEANUP_*.txt
 CLEANUP_*.md
+
+# Local env files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# TypeScript build info
+*.tsbuildinfo
+

@@ -1,4 +1,5 @@
 import asyncio
+import os
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from typing import Awaitable, Callable
@@ -72,6 +73,16 @@ class BLEScannerService:
     async def _handle_detection(self, device, advertisement_data):
         now = datetime.now(timezone.utc)
         address = getattr(device, "address", "") or "UNKNOWN"
+
+        # Check if the address matches configured suspicious/attacker MAC address
+        suspicious_mac = os.getenv("SUSPICIOUS_MAC") or os.getenv("ATTACKER_MAC")
+        is_attacker = False
+        if suspicious_mac and address:
+            norm_addr = address.replace(":", "").replace("-", "").strip().lower()
+            norm_susp = suspicious_mac.replace(":", "").replace("-", "").strip().lower()
+            if norm_addr == norm_susp:
+                is_attacker = True
+
         first_seen = self._first_seen.setdefault(address, now)
         self._last_seen[address] = now
         service_uuids = getattr(advertisement_data, "service_uuids", None) or []
@@ -104,7 +115,7 @@ class BLEScannerService:
             estimatedAdvertisementSize=estimated_advertisement_size,
             firstSeenAt=first_seen,
             lastSeenAt=now,
-            source="realtime-scanner",
+            source="controlled-anomaly-test" if is_attacker else "realtime-scanner",
         )
         self.last_scan_time = now
         await self.on_event(event)
