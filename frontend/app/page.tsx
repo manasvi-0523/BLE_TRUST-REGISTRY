@@ -34,8 +34,14 @@ import type {
 } from "@/lib/types";
 import { ScanWebSocketClient } from "@/lib/websocket";
 
-const API = process.env.NEXT_PUBLIC_SCANNER_API || "http://127.0.0.1:8000";
-const WS = process.env.NEXT_PUBLIC_SCANNER_WS || "ws://127.0.0.1:8000/ws/scan-events";
+const getScannerHost = () => {
+  if (typeof window !== "undefined") {
+    return window.location.hostname;
+  }
+  return "127.0.0.1";
+};
+const getAPI = () => process.env.NEXT_PUBLIC_SCANNER_API || `http://${getScannerHost()}:8000`;
+const getWS = () => process.env.NEXT_PUBLIC_SCANNER_WS || `ws://${getScannerHost()}:8000/ws/scan-events`;
 const MAX_DEBUG_EVENTS = 300;
 
 type IncomingScanEvent = Omit<Partial<BLEDeviceScan>, "source"> & {
@@ -112,7 +118,7 @@ export default function DashboardPage() {
   }, [rows]);
   const highestActive = activeRows[0] || null;
   useEffect(() => {
-    const client = new ScanWebSocketClient(WS);
+    const client = new ScanWebSocketClient(getWS());
     wsRef.current = client;
     const removeState = client.onState(setConnection);
     const removeEvent = client.onEvent((event) => {
@@ -140,7 +146,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const pollStatus = async () => {
       try {
-        const response = await fetch(`${API}/status`);
+        const response = await fetch(`${getAPI()}/status`);
         if (!response.ok) throw new Error(`status ${response.status}`);
         const status = await response.json();
         setScannerStatus(status);
@@ -197,12 +203,12 @@ export default function DashboardPage() {
   }, [highestActive]);
 
   const startMonitoring = useCallback(async () => {
-    await fetch(`${API}/start-monitoring`, { method: "POST" });
+    await fetch(`${getAPI()}/start-monitoring`, { method: "POST" });
     wsRef.current?.connect();
   }, []);
 
   const stopMonitoring = useCallback(async () => {
-    await fetch(`${API}/stop-monitoring`, { method: "POST" });
+    await fetch(`${getAPI()}/stop-monitoring`, { method: "POST" });
   }, []);
 
   const registerBaseline = useCallback((device: BLEDeviceScan, forceDemoOverride = false) => {
