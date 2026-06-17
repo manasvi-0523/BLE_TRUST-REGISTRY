@@ -31,13 +31,12 @@ export function scoreRssiTrend(rssiHistory: number[]) {
   const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
   const variance = values.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / values.length;
   const standardDeviation = Math.sqrt(variance);
-  if (standardDeviation > 12) return { score: 30, reason: "RSSI is jumping erratically." };
+  if (standardDeviation > 15) return { score: 20, reason: "RSSI is jumping erratically." };
 
   const xMean = (values.length - 1) / 2;
   const numerator = values.reduce((sum, value, index) => sum + (index - xMean) * (value - mean), 0);
   const denominator = values.reduce((sum, _value, index) => sum + Math.pow(index - xMean, 2), 0);
   const slope = denominator ? numerator / denominator : 0;
 
-  if (slope > 2) return { score: 20, reason: "Device is moving closer. RSSI is rising." };
   return { score: 0, reason: "" };
 }

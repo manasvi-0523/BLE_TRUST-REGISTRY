@@ -172,7 +172,7 @@ export default function DashboardPage() {
       return;
     }
     if (highestActive.riskLevel === "Critical") setMonitoringState("POTENTIAL_TRUST_DEVIATION");
-    else if (highestActive.riskLevel === "High" || highestActive.riskLevel === "Medium") setMonitoringState("SUSPICIOUS_ACTIVITY");
+    else if (highestActive.riskLevel === "High") setMonitoringState("SUSPICIOUS_ACTIVITY");
     else setMonitoringState("MONITORING_ACTIVE");
   }, [connection, highestActive, scannerStatus.running]);
 
@@ -468,8 +468,8 @@ function isBehavioralEventAnomalous(event: BLEDeviceScan, history: DeviceHistory
     burst.score > 0 ||
     timing.score > 0 ||
     trend.score > 0 ||
-    frequencyZ > 2.0 ||
-    rssiZ > 3.5 ||
+    frequencyZ > 3.0 ||
+    rssiZ > 4.5 ||
     event.advertisementFrequency > 50 ||
     event.estimatedAdvertisementSize > 200
   );

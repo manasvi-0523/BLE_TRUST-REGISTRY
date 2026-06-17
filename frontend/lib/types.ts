@@ -60,6 +60,7 @@ export type TrustStatus =
   | "Trusted"
   | "Observing"
   | "Unregistered"
+  | "Review"
   | "Suspicious"
   | "Potential Trust Deviation";
 

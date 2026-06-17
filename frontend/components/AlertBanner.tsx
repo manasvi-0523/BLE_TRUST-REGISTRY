@@ -33,14 +33,14 @@ export function AlertBanner({
             {state === "red"
               ? "Potential Trust Deviation"
               : state === "yellow"
-                ? "Suspicious BLE Behavior"
+                ? "BLE Behavior Needs Review"
                 : "Monitoring Stable"}
           </h1>
           <p className="text-sm opacity-80">
             {state === "red"
               ? "Multiple behavior signals indicate a possible trust violation. Review before taking action."
               : state === "yellow"
-                ? "Unusual BLE behavior found. Continue monitoring and compare against the baseline."
+                ? "A non-critical behavior change was observed. Continue monitoring before escalation."
                 : "No suspicious BLE behavior is currently active."}
           </p>
         </div>

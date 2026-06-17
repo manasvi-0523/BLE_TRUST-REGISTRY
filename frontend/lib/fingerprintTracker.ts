@@ -10,9 +10,9 @@ export function getFingerprint(device: BLEDeviceScan) {
 }
 
 export function scoreFingerprintConsistency(uniqueCount: number) {
-  if (uniqueCount >= 4) return { score: 60, reason: `Fingerprint changed ${uniqueCount} times.` };
-  if (uniqueCount === 3) return { score: 40, reason: "Fingerprint changed 3 times." };
-  if (uniqueCount === 2) return { score: 20, reason: "Fingerprint changed twice." };
+  if (uniqueCount >= 5) return { score: 45, reason: `Fingerprint changed ${uniqueCount} times.` };
+  if (uniqueCount === 4) return { score: 30, reason: "Fingerprint changed 4 times." };
+  if (uniqueCount === 3) return { score: 15, reason: "Fingerprint changed 3 times." };
   return { score: 0, reason: "" };
 }
 

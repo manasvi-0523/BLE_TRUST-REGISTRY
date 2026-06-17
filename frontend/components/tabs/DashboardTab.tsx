@@ -42,9 +42,11 @@ export function DashboardTab({
           <Gauge value={environmentTrust} label="Environment Trust Score" />
           <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
             <Stat label="Trusted" value={String(rows.filter((row) => row.trustStatus === "Trusted").length)} />
+            <Stat label="Review" value={String(rows.filter((row) => row.trustStatus === "Review").length)} />
             <Stat label="Suspicious" value={String(rows.filter((row) => row.trustStatus === "Suspicious").length)} />
             <Stat label="Critical" value={String(rows.filter((row) => row.riskLevel === "Critical").length)} />
             <Stat label="Unregistered" value={String(rows.filter((row) => row.trustStatus === "Unregistered").length)} />
+            <Stat label="Observing" value={String(rows.filter((row) => row.trustStatus === "Observing").length)} />
           </div>
         </Card>
 

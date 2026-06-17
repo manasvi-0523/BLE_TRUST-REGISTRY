@@ -3,8 +3,8 @@ export function getZScore(history: number[], newValue: number): number {
   const mean = history.reduce((a, b) => a + b, 0) / history.length;
   const variance = history.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / history.length;
   const std = Math.sqrt(variance);
-  if (std === 0) return newValue === mean ? 0 : 5;
-  return Math.abs(newValue - mean) / std;
+  const effectiveStd = Math.max(std, 1);
+  return Math.abs(newValue - mean) / effectiveStd;
 }
 
 export function capContribution(value: number, cap: number) {

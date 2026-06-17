@@ -27,11 +27,15 @@ export function classifyRiskBySignals(signals: {
   hasStrongFingerprintMismatch: boolean;
   hasSimultaneousDuplicate: boolean;
   consecutiveAnomalyCount: number;
+  hasBaseline: boolean;
+  observationCount: number;
 }): RiskLevel {
   if (signals.hasSimultaneousDuplicate) return "Critical";
   if (signals.hasIdentityAnomaly && signals.hasFingerprintMismatch) return "Critical";
   if (signals.hasIdentityAnomaly && signals.hasBaselineDeviation) return "Critical";
-  if (signals.hasBehavioralAnomaly && signals.hasBaselineDeviation) return "High";
+  if (signals.hasBaseline && signals.observationCount < 20) return "Low";
+  if (signals.hasBehavioralAnomaly && signals.hasBaselineDeviation && signals.consecutiveAnomalyCount >= 3) return "High";
+  if (signals.hasBehavioralAnomaly && signals.hasBaselineDeviation) return "Medium";
   if (signals.hasBehavioralAnomaly && signals.consecutiveAnomalyCount >= 3) return "Medium";
   if (signals.hasBehavioralAnomaly && signals.consecutiveAnomalyCount < 3) return "Low";
   return "Low";
@@ -95,6 +99,10 @@ export function verifyAuthenticity(
     };
   }
 
+  const frequencyTolerance = percentTolerance(baselineOrNull.averageFrequency, 0.2, 0.5);
+  const rssiTolerance = 15;
+  const sizeAverage = (baselineOrNull.estimatedAdvertisementSizeMin + baselineOrNull.estimatedAdvertisementSizeMax) / 2;
+  const sizeTolerance = percentTolerance(sizeAverage, 0.15, 4);
   const checks = [
     {
       label: "Address",
@@ -104,19 +112,17 @@ export function verifyAuthenticity(
     },
     {
       label: "RSSI range",
-      registered: `${baselineOrNull.rssiMin}-${baselineOrNull.rssiMax}`,
+      registered: `${baselineOrNull.rssiMin}-${baselineOrNull.rssiMax} plus ${rssiTolerance} dBm tolerance`,
       live: `${device.rssi}`,
-      result: device.rssi >= baselineOrNull.rssiMin && device.rssi <= baselineOrNull.rssiMax ? "Passed" : "Failed"
+      result: isOutsideRange(device.rssi, baselineOrNull.rssiMin, baselineOrNull.rssiMax, rssiTolerance) ? "Failed" : "Passed"
     },
     {
       label: "Frequency range",
-      registered: `${baselineOrNull.frequencyMin}-${baselineOrNull.frequencyMax}`,
+      registered: `${baselineOrNull.frequencyMin}-${baselineOrNull.frequencyMax} plus ${frequencyTolerance.toFixed(1)} tolerance`,
       live: `${device.advertisementFrequency.toFixed(1)}`,
-      result:
-        device.advertisementFrequency >= baselineOrNull.frequencyMin &&
-        device.advertisementFrequency <= baselineOrNull.frequencyMax
-          ? "Passed"
-          : "Failed"
+      result: isOutsideRange(device.advertisementFrequency, baselineOrNull.frequencyMin, baselineOrNull.frequencyMax, frequencyTolerance)
+        ? "Failed"
+        : "Passed"
     },
     {
       label: "Service UUID count",
@@ -126,13 +132,16 @@ export function verifyAuthenticity(
     },
     {
       label: "Estimated advertisement size",
-      registered: `${baselineOrNull.estimatedAdvertisementSizeMin}-${baselineOrNull.estimatedAdvertisementSizeMax}`,
+      registered: `${baselineOrNull.estimatedAdvertisementSizeMin}-${baselineOrNull.estimatedAdvertisementSizeMax} plus ${sizeTolerance.toFixed(1)} tolerance`,
       live: String(device.estimatedAdvertisementSize),
-      result:
-        device.estimatedAdvertisementSize >= baselineOrNull.estimatedAdvertisementSizeMin &&
-        device.estimatedAdvertisementSize <= baselineOrNull.estimatedAdvertisementSizeMax
-          ? "Passed"
-          : "Failed"
+      result: isOutsideRange(
+        device.estimatedAdvertisementSize,
+        baselineOrNull.estimatedAdvertisementSizeMin,
+        baselineOrNull.estimatedAdvertisementSizeMax,
+        sizeTolerance
+      )
+        ? "Failed"
+        : "Passed"
     }
   ] as AuthenticityResult["checks"];
 
@@ -146,6 +155,14 @@ export function verifyAuthenticity(
 
 function safeLower(value?: string | null) {
   return String(value || "").trim().toLowerCase();
+}
+
+function isOutsideRange(value: number, min: number, max: number, tolerance: number) {
+  return value < min - tolerance || value > max + tolerance;
+}
+
+function percentTolerance(averageValue: number, percent: number, minimum: number) {
+  return Math.max(Math.abs(averageValue) * percent, minimum);
 }
 
 export function calculateRiskScore(
@@ -205,49 +222,67 @@ export function calculateRiskScore(
 
   let hasBaselineDeviation = false;
   if (baselineOrNull) {
+    const frequencyTolerance = percentTolerance(baselineOrNull.averageFrequency, 0.2, 0.5);
+    const rssiTolerance = 15;
+    const sizeAverage = (baselineOrNull.estimatedAdvertisementSizeMin + baselineOrNull.estimatedAdvertisementSizeMax) / 2;
+    const sizeTolerance = percentTolerance(sizeAverage, 0.15, 4);
+
     let frequencyScore = 0;
     const frequencyZ = getZScore(history.frequency, device.advertisementFrequency);
-    if (frequencyZ > 3.5) {
+    const frequencyOutsideRange = isOutsideRange(
+      device.advertisementFrequency,
+      baselineOrNull.frequencyMin,
+      baselineOrNull.frequencyMax,
+      frequencyTolerance
+    );
+    if (frequencyZ > 4.5 && frequencyOutsideRange) {
       hasBaselineDeviation = true;
       frequencyScore += 30;
       reasons.push(`Frequency deviation z-score: ${frequencyZ.toFixed(1)}.`);
-    } else if (frequencyZ > 2.0) {
+    } else if (frequencyZ > 3.0 && frequencyOutsideRange) {
       hasBaselineDeviation = true;
       frequencyScore += 15;
       reasons.push(`Frequency variation is unusual (z-score ${frequencyZ.toFixed(1)}).`);
     }
-    if (device.advertisementFrequency < baselineOrNull.frequencyMin || device.advertisementFrequency > baselineOrNull.frequencyMax) {
+    if (frequencyOutsideRange) {
       hasBaselineDeviation = true;
       frequencyScore += 15;
-      reasons.push("Advertisement frequency is outside the saved baseline range.");
+      reasons.push("Advertisement frequency is outside the tolerated baseline range.");
     }
     score += capContribution(frequencyScore, 35);
 
     let rssiScore = 0;
     const rssiZ = getZScore(history.rssi, device.rssi);
-    if (rssiZ > 3.5) {
+    const rssiOutsideRange = isOutsideRange(device.rssi, baselineOrNull.rssiMin, baselineOrNull.rssiMax, rssiTolerance);
+    if (rssiZ > 4.5 && rssiOutsideRange) {
       hasBaselineDeviation = true;
       rssiScore += 15;
       reasons.push(`RSSI deviation z-score: ${rssiZ.toFixed(1)}.`);
     }
-    if (device.rssi < baselineOrNull.rssiMin || device.rssi > baselineOrNull.rssiMax) {
+    if (rssiOutsideRange) {
       hasBaselineDeviation = true;
       rssiScore += 10;
-      reasons.push("RSSI is outside the trusted baseline range.");
+      reasons.push("RSSI is outside the tolerated trusted baseline range.");
     }
     score += capContribution(rssiScore, 20);
 
     let sizeScore = 0;
     const sizeZ = getZScore(history.estimatedAdvertisementSizes, device.estimatedAdvertisementSize);
-    if (sizeZ > 3.0) {
+    const sizeOutsideRange = isOutsideRange(
+      device.estimatedAdvertisementSize,
+      baselineOrNull.estimatedAdvertisementSizeMin,
+      baselineOrNull.estimatedAdvertisementSizeMax,
+      sizeTolerance
+    );
+    if (sizeZ > 4.0 && sizeOutsideRange) {
       hasBaselineDeviation = true;
       sizeScore += 15;
       reasons.push(`Estimated advertisement size deviation z-score: ${sizeZ.toFixed(1)}.`);
     }
-    if (device.estimatedAdvertisementSize < baselineOrNull.estimatedAdvertisementSizeMin || device.estimatedAdvertisementSize > baselineOrNull.estimatedAdvertisementSizeMax) {
+    if (sizeOutsideRange) {
       hasBaselineDeviation = true;
       sizeScore += 15;
-      reasons.push("Estimated advertisement size is outside the trusted baseline range.");
+      reasons.push("Estimated advertisement size is outside the tolerated trusted baseline range.");
     }
     score += capContribution(sizeScore, 25);
 
@@ -279,11 +314,11 @@ export function calculateRiskScore(
   const finalScore = Math.max(0, Math.min(100, score));
   const frequencyZ = getZScore(history.frequency, device.advertisementFrequency);
   const rssiZ = getZScore(history.rssi, device.rssi);
-  const hasBehavioralAnomaly = burst.score > 0 || timing.score > 0 || rssiTrend.score > 0 || frequencyZ > 2.0 || rssiZ > 3.5;
+  const hasBehavioralAnomaly = burst.score > 0 || timing.score > 0 || rssiTrend.score > 0 || frequencyZ > 3.0 || rssiZ > 4.5;
   const fingerprintCount = runtime.fingerprintCounts[device.address] || 1;
-  const hasFingerprintDrift = fingerprintCount === 2;
-  const hasFingerprintMismatch = fingerprintCount >= 3;
-  const hasStrongFingerprintMismatch = fingerprintCount >= 4;
+  const hasFingerprintDrift = fingerprintCount === 3;
+  const hasFingerprintMismatch = fingerprintCount >= 4;
+  const hasStrongFingerprintMismatch = fingerprintCount >= 5;
   if (hasFingerprintDrift && !hasFingerprintMismatch) {
     reasons.push("Minor fingerprint drift observed. Continue monitoring before escalation.");
   }
@@ -306,7 +341,9 @@ export function calculateRiskScore(
     hasFingerprintMismatch,
     hasStrongFingerprintMismatch,
     hasSimultaneousDuplicate,
-    consecutiveAnomalyCount: runtime.consecutiveAnomalyCount[device.address] || 0
+    consecutiveAnomalyCount: runtime.consecutiveAnomalyCount[device.address] || 0,
+    hasBaseline: Boolean(baselineOrNull),
+    observationCount
   });
   const prediction = getPrediction(riskLevel, Boolean(baselineOrNull), warmedUp);
   const trustStatus = getTrustStatus(riskLevel, Boolean(baselineOrNull), warmedUp);
@@ -336,7 +373,8 @@ function getPrediction(riskLevel: RiskLevel, hasBaseline: boolean, warmedUp: boo
 
 function getTrustStatus(riskLevel: RiskLevel, hasBaseline: boolean, warmedUp: boolean): TrustStatus {
   if (riskLevel === "Critical") return "Potential Trust Deviation";
-  if (riskLevel === "High" || riskLevel === "Medium") return "Suspicious";
+  if (riskLevel === "High") return "Suspicious";
+  if (riskLevel === "Medium") return "Review";
   if (hasBaseline) return "Trusted";
   if (!warmedUp) return "Observing";
   return "Unregistered";
@@ -345,6 +383,7 @@ function getTrustStatus(riskLevel: RiskLevel, hasBaseline: boolean, warmedUp: bo
 function getRecommendedAction(trustStatus: TrustStatus) {
   if (trustStatus === "Potential Trust Deviation") return "Avoid pairing, disconnect if connected, and inspect the ledger evidence.";
   if (trustStatus === "Suspicious") return "Continue monitoring and verify the device manually.";
+  if (trustStatus === "Review") return "Keep monitoring. Recalibrate the baseline only if the device is physically trusted.";
   if (trustStatus === "Unregistered" || trustStatus === "Observing") return "Register a baseline if this is your device.";
   return "No action required.";
 }
