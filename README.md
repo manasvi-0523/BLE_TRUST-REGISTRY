@@ -327,7 +327,7 @@ npm.cmd install
 Start both backend and frontend:
 
 ```powershell
-cd BLE_TRUST-REGISTRY
+cd ..
 .\scripts\start-dev.cmd
 ```
 
