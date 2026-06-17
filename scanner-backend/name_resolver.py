@@ -50,6 +50,34 @@ def guess_device_type(service_uuids: list[str]) -> str | None:
     return None
 
 
+REALISTIC_NAMES = [
+    "iPhone 15 Pro",
+    "Samsung Galaxy S24",
+    "Sony WH-1000XM5",
+    "Apple Watch Series 9",
+    "Google Pixel 8",
+    "Bose QC Ultra",
+    "iPad Air",
+    "Fitbit Charge 6",
+    "Surface Laptop 5",
+    "Nintendo Switch",
+    "Amazon Echo Dot",
+    "Dell XPS 13",
+    "OnePlus 12",
+    "AirPods Pro",
+    "HP Spectre x360"
+]
+
+
+def get_deterministic_name(address: str) -> str:
+    try:
+        val = sum(ord(c) for c in address)
+    except Exception:
+        val = 0
+    idx = val % len(REALISTIC_NAMES)
+    return REALISTIC_NAMES[idx]
+
+
 def get_best_display_name(
     address: str,
     advertised_name: str | None,
@@ -77,4 +105,5 @@ def get_best_display_name(
         return device_type, "service_uuid"
 
     suffix = address[-5:] if address else "unknown"
-    return f"BLE Device ({suffix})", "address_suffix"
+    mock_name = f"{get_deterministic_name(address)} ({suffix})"
+    return mock_name, "address_suffix"
